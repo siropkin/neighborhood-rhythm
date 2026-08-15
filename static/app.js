@@ -153,10 +153,12 @@ function renderLegend() {
   el.innerHTML = '';
   for (const d of state.devices) {
     const t = d.is_mine ? 'mine' : d.last_type;
-    if (seen.has(t)) continue;
     seen.add(t);
+  }
+  const sorted = [...seen].sort((a, b) => typeLabel(a).localeCompare(typeLabel(b)));
+  for (const t of sorted) {
     const s = document.createElement('span');
-    s.innerHTML = `<i style="background:${colorFor(d)}"></i>${typeLabel(t)}`;
+    s.innerHTML = `<i style="background:${colorFor({is_mine: t==='mine', last_type: t})}"></i>${typeLabel(t)}`;
     el.appendChild(s);
   }
 }
