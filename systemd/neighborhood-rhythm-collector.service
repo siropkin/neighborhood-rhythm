@@ -13,3 +13,6 @@ ExecStart=/home/siropkin/lightcontrol_venv/bin/python /home/siropkin/neighborhoo
 Environment=PYTHONUNBUFFERED=1
 Environment=RHYTHM_SENSOR_ID=sivanpi
 Environment=HOME=/home/siropkin
+# Backstop: a scan is BLE ~15s + WiFi ~17s + mDNS ~10s. 120s is generous but
+# bounded — without this a hung bleak scan blocks the timer indefinitely.
+TimeoutStartSec=120

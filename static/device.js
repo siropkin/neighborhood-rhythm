@@ -73,6 +73,30 @@ async function load() {
 
       ${names.length ? `<div class="d-section"><h3>names advertised</h3><div class="d-names">${names.map(n => `<div class="d-name">${n}</div>`).join('')}</div></div>` : ''}
 
+      ${(() => {
+        // find the latest sighting with decoded enrichment (extra)
+        const enriched = sightings.filter(s => s.extra).slice(-1)[0];
+        if (!enriched || !enriched.extra) return '';
+        let e;
+        try { e = JSON.parse(enriched.extra); } catch { return ''; }
+        const parts = [];
+        if (e.apple) {
+          const a = e.apple;
+          const lines = [];
+          if (a.model) lines.push(`model: ${a.model}`);
+          if (a.battery != null) lines.push(`battery: ${a.battery}%`);
+          if (a.device) lines.push(`type: ${a.device}`);
+          if (a.types) lines.push(`continuity: ${a.types.join(', ')}`);
+          if (lines.length) parts.push(`<b>Apple</b>${lines.map(l => `<div class="d-name">${l}</div>`).join('')}`);
+        }
+        if (e.sensor) {
+          const s = e.sensor;
+          const lines = Object.entries(s).map(([k,v]) => `${k}: ${v}`);
+          parts.push(`<b>Sensor</b>${lines.map(l => `<div class="d-name">${l}</div>`).join('')}`);
+        }
+        return parts.length ? `<div class="d-section"><h3>decoded payload</h3><div class="d-names">${parts.join('')}</div></div>` : '';
+      })()}
+
       <div class="d-section">
         <h3>recent sightings</h3>
         <div class="table-wrap">

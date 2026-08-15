@@ -13,10 +13,25 @@ from classify import classify
 from config import SENSOR_ID, RETENTION_DAYS
 from position import _distance_from_rssi
 from rules import is_random_mac
+from enrich import enrich
 
 
 def _now():
     return time.time()
+
+
+# Per-class TX power defaults (dBm @ 1m) when the device doesn't advertise tx.
+# ponytail: rough defaults from research; refine after a week of data.
+_TX_DEFAULTS = {
+    "phone": -65, "phone-anon": -65, "wearable": -75, "beacon": -59,
+    "light": -59, "iot": -59, "iot-esp32": -59, "sensor": -59,
+    "tv": -55, "speaker": -55, "laptop": -65, "computer": -65,
+    "apple-device": -65, "samsung-device": -65, "vacuum": -59,
+}
+
+
+def _tx_default(dev_type):
+    return _TX_DEFAULTS.get(dev_type, -59)
 
 
 # --- BLE via bleak ---
@@ -36,15 +51,24 @@ def scan_ble(timeout=10):
             # return_adv=True gives (BLEDevice, AdvertisementData) per device.
             return await BleakScanner.discover(timeout=timeout, return_adv=True)
 
-        for addr, (dev, adv) in asyncio.run(_scan()).items():
+        # Hard ceiling: bleak's internal timeout=10 is the polite exit; this
+        # outer wait_for kills the scan at 15s even if bleak hangs (BlueZ
+        # dbus can stall). Catch TimeoutError, degrade to [].
+        devs = asyncio.run(asyncio.wait_for(_scan(), timeout=timeout + 5))
+        for addr, (dev, adv) in devs.items():
             name = dev.name or getattr(adv, "local_name", "") or ""
             services = [str(u) for u in (adv.service_uuids or [])]
             out.append({
                 "mac": dev.address,
                 "name": name,
                 "rssi": adv.rssi,
+                "tx_power": adv.tx_power,
                 "services": services,
+                "manufacturer_data": {str(k): v.hex() for k, v in (adv.manufacturer_data or {}).items()},
+                "service_data": {str(k): v.hex() for k, v in (adv.service_data or {}).items()},
             })
+    except asyncio.TimeoutError:
+        print("BLE scan timed out; returning partial results", file=sys.stderr)
     except Exception as e:
         print(f"BLE scan failed: {e}", file=sys.stderr)
     return out
@@ -136,9 +160,15 @@ def _store_device(conn, raw, source):
     raw["is_random"] = is_random_mac(mac)
     result = classify(raw)
     rssi = raw.get("rssi")
-    distance = _distance_from_rssi(rssi) if rssi is not None else None
+    tx_power = raw.get("tx_power")
+    # Distance: use tx_power as the reference when present (per-class default
+    # otherwise), then smooth at query time via a rolling median.
+    ref = tx_power if tx_power is not None else _tx_default(result["type"])
+    distance = _distance_from_rssi(rssi, ref) if rssi is not None else None
     services = ",".join(raw.get("services", []))
-    db.insert_sighting(conn, mac, SENSOR_ID, ts, rssi, distance, raw.get("name"), services, source)
+    extra = enrich(raw)  # decoded Apple Continuity / sensor payloads (may be None)
+    db.insert_sighting(conn, mac, SENSOR_ID, ts, rssi, distance, raw.get("name"),
+                       services, source, tx_power, extra)
     db.upsert_device(conn, mac, oui_name, ts, result["type"], result["label"])
     return mac
 

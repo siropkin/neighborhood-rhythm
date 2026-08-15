@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS sightings (
     distance REAL,
     name TEXT,
     services TEXT,
-    source TEXT
+    source TEXT,
+    tx_power REAL,
+    extra TEXT              -- JSON: decoded Apple Continuity, sensor payloads, etc.
 );
 -- Composite (mac, ts) serves: device history (ORDER BY ts), compute_position
 -- (mac + time range, no sort), and the per-device latest-sighting lookup.
@@ -99,6 +101,14 @@ def get_db():
 def init_db():
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        # Migrations: add columns added after the original schema. ALTER TABLE
+        # ADD COLUMN is idempotent-safe via pragma check (CREATE TABLE IF NOT
+        # EXISTS won't add a missing column to an existing table).
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(sightings)")}
+        if "tx_power" not in cols:
+            conn.execute("ALTER TABLE sightings ADD COLUMN tx_power REAL")
+        if "extra" not in cols:
+            conn.execute("ALTER TABLE sightings ADD COLUMN extra TEXT")
 
 
 def upsert_device(conn, mac, oui_name, ts, dev_type, label):
@@ -115,17 +125,20 @@ def upsert_device(conn, mac, oui_name, ts, dev_type, label):
     )
 
 
-def insert_sighting(conn, mac, sensor_id, ts, rssi, distance, name, services, source):
+def insert_sighting(conn, mac, sensor_id, ts, rssi, distance, name, services, source,
+                     tx_power=None, extra=None):
     # Dedup guard: bleak can double-callback the same device within a scan.
     # Same mac + sensor within DEDUP_WINDOW_S is one sighting, not two.
+    import json
+    extra_json = json.dumps(extra) if extra else None
     conn.execute(
-        """INSERT INTO sightings(mac, sensor_id, ts, rssi, distance, name, services, source)
-           SELECT ?,?,?,?,?,?,?,?
+        """INSERT INTO sightings(mac, sensor_id, ts, rssi, distance, name, services, source, tx_power, extra)
+           SELECT ?,?,?,?,?,?,?,?,?,?
            WHERE NOT EXISTS (
              SELECT 1 FROM sightings
              WHERE mac=? AND sensor_id=? AND ts BETWEEN ? AND ?
            )""",
-        (mac, sensor_id, ts, rssi, distance, name, services, source,
+        (mac, sensor_id, ts, rssi, distance, name, services, source, tx_power, extra_json,
          mac, sensor_id, ts - DEDUP_WINDOW_S, ts),
     )
 
@@ -194,7 +207,7 @@ def latest_sighting_per_device(conn, cutoff_ts):
     """Fast latest-sighting-per-device lookup for /api/now. Uses the (mac, ts)
     composite index — one ordered scan per device, no per-row sort."""
     return conn.execute(
-        """SELECT d.*, s.rssi, s.distance, s.name, s.source
+        """SELECT d.*, s.rssi, s.distance, s.name, s.source, s.tx_power
            FROM devices d
            JOIN sightings s ON s.id = (
                SELECT id FROM sightings
@@ -202,6 +215,21 @@ def latest_sighting_per_device(conn, cutoff_ts):
            WHERE d.last_seen >= ?""",
         (cutoff_ts, cutoff_ts),
     ).fetchall()
+
+
+def smoothed_rssi(conn, mac, window=11):
+    """Rolling median of the last `window` RSSI readings for a device.
+    Cuts the ±50% per-sample distance noise far more than fixing the tx ref.
+    Returns None if no rssi readings."""
+    rows = conn.execute(
+        "SELECT rssi FROM sightings WHERE mac=? AND rssi IS NOT NULL ORDER BY ts DESC LIMIT ?",
+        (mac, window),
+    ).fetchall()
+    if not rows:
+        return None
+    vals = sorted(r["rssi"] for r in rows)
+    n = len(vals)
+    return vals[n // 2]  # median
 
 
 if __name__ == "__main__":

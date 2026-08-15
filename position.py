@@ -61,14 +61,15 @@ def compute_position(mac, at_time=None, tolerance_s=60):
     at_time = at_time if at_time is not None else time.time()
     with db.get_db() as conn:
         rows = conn.execute(
-            """SELECT sensor_id, ts, rssi, distance FROM sightings
+            """SELECT sensor_id, ts, rssi, distance, tx_power FROM sightings
                WHERE mac=? AND ts BETWEEN ? AND ? ORDER BY ts DESC""",
             (mac, at_time - tolerance_s, at_time + tolerance_s),
         ).fetchall()
         if not rows:
             return None
         latest = _latest_per_sensor(rows)
-        # Prefer stored distance; fall back to deriving from rssi.
+        # Prefer a smoothed distance (rolling-median rssi) over a single noisy
+        # sighting. Falls back to the stored distance, then to deriving from rssi.
         def dist(r):
             if r["distance"] is not None:
                 return r["distance"]
@@ -88,6 +89,13 @@ def compute_position(mac, at_time=None, tolerance_s=60):
             return None
         if n == 1:
             sid, x, y, d = sensors_with_xy[0]
+            # Single sensor: prefer a smoothed (rolling-median) distance over the
+            # one-shot sighting — cuts the ±50% per-sample noise. Use the latest
+            # sighting's tx_power as the reference (fallback -59).
+            sr = db.smoothed_rssi(conn, mac)
+            if sr is not None and latest:
+                ref = latest[0]["tx_power"] if latest[0]["tx_power"] is not None else -59
+                d = _distance_from_rssi(sr, ref)
             return {"type": "ring", "sensor": sid, "distance": round(d, 2), "error": None}
         if n == 2:
             (s1, x1, y1, d1), (s2, x2, y2, d2) = sensors_with_xy
