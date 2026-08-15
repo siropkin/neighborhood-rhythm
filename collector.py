@@ -103,9 +103,9 @@ def scan_wifi():
         elif line.startswith("SSID:"):
             cur["ssid"] = line.split(":", 1)[1].strip()
         elif line.startswith("freq:"):
-            # freq MHz -> channel (2.4GHz: 2412=1..; 5GHz: 5000+channel). Approximate.
+            # freq MHz -> channel. 2.4GHz: 2412=ch1..; 5GHz: 5000+ch*5 (5180=ch36).
             freq = int(float(line.split(":")[1].strip()))
-            cur["channel"] = (freq - 2412) // 5 + 1 if freq < 5000 else freq - 5000
+            cur["channel"] = (freq - 2412) // 5 + 1 if freq < 5000 else (freq - 5000) // 5
         elif line.startswith("signal:"):
             m = re.search(r"(-?\d+\.\d+)", line)
             cur["signal"] = float(m.group(1)) if m else None
@@ -156,18 +156,20 @@ def scan_mdns(timeout=8):
     # (not inside the browser callback) so zc.close() can't interrupt an
     # in-flight get_service_info and drop a mid-resolve service.
     time.sleep(timeout)
-    seen = []
-    for type_, name in c.services:
-        info = zc.get_service_info(type_, name, timeout=2000)
-        if not info:
-            continue
-        seen.append({
-            "name": name.replace("." + type_, ""),
-            "service": type_,
-            "hostname": (info.server or "").rstrip("."),
-            "txt": info.decoded_properties or {},
-        })
-    zc.close()
+    try:
+        seen = []
+        for type_, name in c.services:
+            info = zc.get_service_info(type_, name, timeout=2000)
+            if not info:
+                continue
+            seen.append({
+                "name": name.replace("." + type_, ""),
+                "service": type_,
+                "hostname": (info.server or "").rstrip("."),
+                "txt": info.decoded_properties or {},
+            })
+    finally:
+        zc.close()
 
     # enrich each with model + category from the TXT records
     out = []

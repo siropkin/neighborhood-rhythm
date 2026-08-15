@@ -296,9 +296,12 @@ function startStream() {
   es.onmessage = onmsg;
   function onerror() {
     es.close();
-    es = new EventSource('/stream?since=' + lastSightingId);
-    es.onmessage = onmsg;
-    es.onerror = onerror;
+    // Backoff so a server returning 500 doesn't trigger a tight reconnect loop.
+    setTimeout(() => {
+      es = new EventSource('/stream?since=' + lastSightingId);
+      es.onmessage = onmsg;
+      es.onerror = onerror;
+    }, 3000);
   }
   es.onerror = onerror;
 }

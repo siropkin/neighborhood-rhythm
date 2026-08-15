@@ -252,15 +252,13 @@ def api_stats():
         ).fetchone()["c"]
         # all-time
         total = conn.execute("SELECT COUNT(*) c FROM devices").fetchone()["c"]
-        by_type = {r["last_type"]: r["c"] for r in conn.execute(
-            "SELECT last_type, COUNT(*) c FROM devices GROUP BY last_type").fetchall()}
         n_ap = conn.execute("SELECT COUNT(*) c FROM wifi_aps").fetchone()["c"]
         n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors").fetchone()["c"]
         # dedup'd device count (fingerprints merge rotated MACs + cross-radio)
         n_fp = conn.execute("SELECT COUNT(*) c FROM device_fingerprints").fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
     return jsonify({
-        "current": current, "total": total, "by_type": by_type,
+        "current": current, "total": total,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
         "last_scan": last,
     })

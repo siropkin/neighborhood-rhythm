@@ -99,16 +99,15 @@ def decode_sensor(raw):
         if key in svc:
             return decode_bthome(bytes.fromhex(svc[key]))
 
-    # RuuviTag (manufacturer data, company 0x0499)
-    if "1189" in mfr or 0x0499 in mfr or "0x499" in mfr:
-        raw_hex = mfr.get("1189") or mfr.get(0x0499) or mfr.get("0x499")
-        if raw_hex:
-            return decode_ruuvitag(bytes.fromhex(raw_hex))
+    # RuuviTag (manufacturer data, company 0x0499 = decimal 1177)
+    raw_hex = mfr.get("1177")
+    if raw_hex:
+        return decode_ruuvitag(bytes.fromhex(raw_hex))
 
-    # Govee (company 0xEC88 or 0x0001)
-    for cid in ("60424", "0xec88", "0001"):
+    # Govee (company 0xEC88 = decimal 60552, or 0x0001 = decimal 1)
+    for cid, cid_int in (("60552", 0xEC88), ("1", 0x0001)):
         if cid in mfr:
-            return decode_govee(bytes.fromhex(mfr[cid]), int(cid, 16) if cid.startswith("0x") else int(cid))
+            return decode_govee(bytes.fromhex(mfr[cid]), cid_int)
 
     return None
 
