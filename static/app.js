@@ -231,9 +231,11 @@ async function refresh() {
     renderTypeBreakdown();
     renderTable();
     setIndicators('ok');
-    // hide the first-load overlay once we have data
+    // hide the first-load overlay + reveal content once we have data
     const loading = document.getElementById('loading');
     if (loading) loading.classList.add('hidden');
+    const content = document.getElementById('content');
+    if (content) content.classList.remove('content-hidden');
   } catch (e) {
     setIndicators('');
     console.error('refresh failed', e);
