@@ -1,5 +1,7 @@
 """Reclassify all existing devices with the current rules. Run after changing
 rules.py to refresh device types/labels without waiting for a new scan."""
+import json
+
 import db
 import oui
 from classify import classify
@@ -19,14 +21,24 @@ def main():
                 "services": [],
                 "is_random": is_random_mac(mac),
             }
-            # pull the latest name + services for this device
+            # pull the latest name + services + extra (mDNS model/category) for this device
             s = conn.execute(
-                "SELECT name, services FROM sightings WHERE mac=? ORDER BY ts DESC LIMIT 1",
+                "SELECT name, services, extra FROM sightings WHERE mac=? ORDER BY ts DESC LIMIT 1",
                 (mac,),
             ).fetchone()
             if s:
                 raw["name"] = s["name"] or ""
                 raw["services"] = [s["services"]] if s["services"] else []
+                # Restore mDNS model/category from the enriched extra JSON so
+                # classify() can reproduce category-based types on reclassify.
+                if s["extra"]:
+                    try:
+                        extra = json.loads(s["extra"])
+                        mdns = extra.get("mdns") or {}
+                        raw["model"] = mdns.get("model")
+                        raw["category"] = mdns.get("category")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
             result = classify(raw)
             conn.execute(
                 "UPDATE devices SET last_type=?, last_label=? WHERE mac=?",

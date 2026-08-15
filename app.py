@@ -1,11 +1,12 @@
 """app.py — Flask server. Dashboard + JSON API. Bound to 0.0.0.0:8000."""
+import json
 import time
 from functools import wraps
 
 from flask import Flask, request, jsonify, render_template, Response
 
 import db
-from config import SENSOR_ID, PEER_TOKEN
+from config import SENSOR_ID, PEER_TOKEN, ACTIVE_WINDOW_S
 from position import compute_position
 
 app = Flask(__name__)
@@ -60,7 +61,7 @@ def device_page(mac):
 
 @app.route("/api/now")
 def api_now():
-    cutoff = time.time() - 600  # seen in last 10 min
+    cutoff = time.time() - ACTIVE_WINDOW_S  # seen in last 10 min
     with db.get_db() as conn:
         rows = db.latest_sighting_per_device(conn, cutoff)
         devices = [dict(r) for r in rows]
@@ -120,7 +121,7 @@ def api_tag(mac):
 @app.route("/api/positions")
 def api_positions():
     now = time.time()
-    cutoff = now - 600  # match /api/now: devices seen in last 10 min
+    cutoff = now - ACTIVE_WINDOW_S  # match /api/now: devices seen in last 10 min
     with db.get_db() as conn:
         macs = [r["mac"] for r in conn.execute(
             "SELECT DISTINCT mac FROM sightings WHERE ts >= ?", (cutoff,)
@@ -128,7 +129,7 @@ def api_positions():
     out = {}
     for mac in macs:
         # Use the same 10-min window so a device seen minutes ago still gets a ring.
-        p = compute_position(mac, at_time=now, tolerance_s=600)
+        p = compute_position(mac, at_time=now, tolerance_s=ACTIVE_WINDOW_S)
         if p:
             out[mac] = p
     return jsonify({"positions": out})
@@ -177,8 +178,6 @@ def api_sensors():
 @app.route("/stream")
 def stream():
     """SSE: push new sightings to the dashboard live."""
-    import json as _json
-
     # Read since inside the request context (the generator outlives it).
     # since=0 = "don't replay history" — seed to current max, else we'd
     # replay thousands of old sightings and exhaust the browser.
@@ -207,7 +206,7 @@ def stream():
                 ).fetchall()
                 for r in rows:
                     cursor[0] = r["id"]
-                    yield f"data: {_json.dumps(dict(r))}\n\n"
+                    yield f"data: {json.dumps(dict(r))}\n\n"
                 yield ": ping\n\n"  # heartbeat
                 time.sleep(2)
         finally:
@@ -220,28 +219,21 @@ def stream():
 @app.route("/api/stats")
 def api_stats():
     now = time.time()
-    current_cutoff = now - 600  # 10 min, matches /api/now
+    current_cutoff = now - ACTIVE_WINDOW_S  # 10 min, matches /api/now
     with db.get_db() as conn:
         # current (active now)
         current = conn.execute(
             "SELECT COUNT(DISTINCT mac) c FROM sightings WHERE ts >= ?", (current_cutoff,)
         ).fetchone()["c"]
-        current_named = conn.execute(
-            """SELECT COUNT(DISTINCT s.mac) c FROM sightings s JOIN devices d ON d.mac=s.mac
-               WHERE s.ts >= ? AND d.last_label IS NOT NULL""", (current_cutoff,)
-        ).fetchone()["c"]
         # all-time
         total = conn.execute("SELECT COUNT(*) c FROM devices").fetchone()["c"]
-        named = conn.execute("SELECT COUNT(*) c FROM devices WHERE last_label IS NOT NULL").fetchone()["c"]
-        mine = conn.execute("SELECT COUNT(*) c FROM devices WHERE is_mine=1").fetchone()["c"]
         by_type = {r["last_type"]: r["c"] for r in conn.execute(
             "SELECT last_type, COUNT(*) c FROM devices GROUP BY last_type").fetchall()}
         n_ap = conn.execute("SELECT COUNT(*) c FROM wifi_aps").fetchone()["c"]
         n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors").fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
     return jsonify({
-        "current": current, "current_named": current_named,
-        "total": total, "named": named, "mine": mine, "by_type": by_type,
+        "current": current, "total": total, "by_type": by_type,
         "wifi": n_ap, "sensors": n_sensors, "last_scan": last,
     })
 

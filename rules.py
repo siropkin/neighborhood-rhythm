@@ -78,6 +78,14 @@ OUI_RULES = {
     "ecobee": ("thermostat", "ecobee thermostat", 0.8),
 }
 
+# HomeKit category IDs (from _hap TXT 'ci') -> our type taxonomy.
+# Maps to existing type keys so TYPE_COLORS/TYPE_LABELS cover them.
+HAP_CATEGORY = {
+    1: "bridge", 2: "fan", 4: "light", 5: "lock", 6: "outlet", 7: "switch",
+    8: "thermostat", 9: "sensor", 10: "sensor", 16: "camera", 17: "sensor",
+    18: "sensor", 22: "speaker",
+}
+
 def is_random_mac(mac):
     """Locally-administered bit = second bit of first octet (0b10).
     Returns False for non-MAC keys (e.g. mDNS pseudo-macs like 'mdns:...')."""

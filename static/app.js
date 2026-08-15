@@ -22,6 +22,7 @@ const TYPE_LABELS = {
 };
 const typeLabel = t => TYPE_LABELS[t] || t;
 const colorFor = d => d.is_mine ? '#f0c674' : (TYPE_COLORS[d.last_type] || '#484f58');
+const colorForType = t => colorFor({is_mine: t === 'mine', last_type: t});
 const fmtAgo = ts => {
   if (!ts) return '—';
   const s = Date.now()/1000 - ts;
@@ -140,7 +141,7 @@ function renderTypeBreakdown() {
   const max = Math.max(1, ...sorted.map(s => s[1]));
   el.innerHTML = sorted.map(([t, n]) => `
     <div class="tb-row">
-      <i class="tb-dot" style="background:${colorFor({is_mine: t==='mine', last_type: t})}"></i>
+      <i class="tb-dot" style="background:${colorForType(t)}"></i>
       <span class="tb-name" title="${t}">${typeLabel(t)}</span>
       <span class="tb-bar"><span style="width:${(n/max*100).toFixed(0)}%"></span></span>
       <span class="tb-count">${n}</span>
@@ -152,13 +153,13 @@ function renderLegend() {
   const el = document.getElementById('radar-legend');
   el.innerHTML = '';
   for (const d of state.devices) {
-    const t = d.is_mine ? 'mine' : d.last_type;
+    const t = d.is_mine ? 'mine' : (d.last_type || 'unknown');
     seen.add(t);
   }
   const sorted = [...seen].sort((a, b) => typeLabel(a).localeCompare(typeLabel(b)));
   for (const t of sorted) {
     const s = document.createElement('span');
-    s.innerHTML = `<i style="background:${colorFor({is_mine: t==='mine', last_type: t})}"></i>${typeLabel(t)}`;
+    s.innerHTML = `<i style="background:${colorForType(t)}"></i>${typeLabel(t)}`;
     el.appendChild(s);
   }
 }

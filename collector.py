@@ -11,7 +11,7 @@ import oui
 from classify import classify
 from config import SENSOR_ID, RETENTION_DAYS
 from position import _distance_from_rssi
-from rules import is_random_mac
+from rules import is_random_mac, HAP_CATEGORY
 from enrich import enrich
 
 
@@ -124,13 +124,6 @@ MDNS_TYPES = [
     "_yandexio._tcp.local.",
 ]
 
-# HomeKit category IDs (from _hap txt 'ci') -> our type taxonomy
-HAP_CATEGORY = {
-    1: "bridge", 2: "fan", 4: "light", 5: "lock", 6: "outlet", 7: "switch",
-    8: "thermostat", 9: "sensor", 10: "security", 16: "camera", 17: "doorbell",
-    18: "air purifier", 22: "speaker",
-}
-
 
 def scan_mdns(timeout=8):
     """Browse mDNS service types, resolve TXT records. Returns {name, service, hostname, model, category}."""
@@ -152,15 +145,17 @@ def scan_mdns(timeout=8):
         def remove_service(self, zc, type_, name):
             pass
 
-    zc = Zeroconf()
+    try:
+        zc = Zeroconf()
+    except OSError:
+        return []
     c = Collect()
     for t in MDNS_TYPES:
         ServiceBrowser(zc, t, c)
     # let it discover for `timeout` seconds, then resolve on the main thread
     # (not inside the browser callback) so zc.close() can't interrupt an
     # in-flight get_service_info and drop a mid-resolve service.
-    import time as _t
-    _t.sleep(timeout)
+    time.sleep(timeout)
     seen = []
     for type_, name in c.services:
         info = zc.get_service_info(type_, name, timeout=2000)
@@ -224,9 +219,10 @@ def main():
         for raw in scan_bt():
             if _store_device(conn, raw, "bt"):
                 n_dev += 1
-        # mDNS: no MAC — key by hostname+service as a pseudo-device
+        # mDNS: no MAC — key by hostname so one physical device (advertising
+        # multiple services: _airplay + _raop + _hap) is one row, not N rows.
         for raw in scan_mdns():
-            raw["mac"] = f"mdns:{raw.get('hostname') or raw.get('name')}:{raw.get('service')}"
+            raw["mac"] = f"mdns:{raw.get('hostname') or raw.get('name')}"
             raw["services"] = [raw.get("service", "")]
             if _store_device(conn, raw, "mdns"):
                 n_dev += 1

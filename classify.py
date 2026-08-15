@@ -9,12 +9,13 @@ def classify(raw):
     services = [s.lower() for s in (raw.get("services") or [])]
 
     # 0. mDNS self-identification — highest confidence (the device's own model/category).
+    # HomeKit category is authoritative for type. A bare model is a good label but
+    # not a type — fall through to service/name/OUI rules so a Chromecast with
+    # model='Chromecast' still classifies as 'speaker' via _googlecast, not 'unknown'.
     model = raw.get("model")
     category = raw.get("category")
     if category:
         return {"type": category, "label": model or category, "confidence": 0.9}
-    if model:
-        return {"type": "unknown", "label": model, "confidence": 0.75}
 
     # 1. Name rules.
     for match, dev_type, label_fn, conf in NAME_RULES:
@@ -25,7 +26,8 @@ def classify(raw):
     for svc in services:
         for key, (dev_type, label, conf) in SERVICE_RULES.items():
             if key in svc:
-                return {"type": dev_type, "label": label, "confidence": conf}
+                # Prefer the mDNS model as the label when we have one.
+                return {"type": dev_type, "label": model or label, "confidence": conf}
 
     # 3. OUI rules.
     for vendor_key, (dev_type, label, conf) in OUI_RULES.items():
@@ -37,9 +39,11 @@ def classify(raw):
     if raw.get("is_random") or (is_random_mac(mac) and not name):
         return {"type": "phone-anon", "label": "anonymous mobile (privacy mode)", "confidence": 0.3}
 
-    # 5. Fallback.
+    # 5. Fallback — use the mDNS model as the label if we have one.
     if name:
         return {"type": "unknown", "label": raw.get("name"), "confidence": 0.4}
+    if model:
+        return {"type": "unknown", "label": model, "confidence": 0.4}
     return {"type": "unknown", "label": None, "confidence": 0.2}
 
 
