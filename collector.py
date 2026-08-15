@@ -161,13 +161,13 @@ def scan_lan():
     mac_re = re.compile(r"[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}")
     for line in r.stdout.splitlines():
         parts = line.split()
-        if len(parts) < 5 or parts[3] != "lladdr":
+        # "192.168.1.85 lladdr 00:71:47:4e:82:70 STALE" or "... router ..."
+        if len(parts) < 4 or parts[1] != "lladdr":
             continue
         ip = parts[0]
-        mac = parts[4]
-        if not mac_re.match(mac) or parts[-1] == "FAILED":
+        mac = parts[2]
+        if not mac_re.match(mac) or "FAILED" in parts:
             continue
-        # skip the router/gateway (it's an AP, not a client) — best-effort
         out.append({"mac": mac, "ip": ip, "name": "", "rssi": None, "services": []})
     return out
 
