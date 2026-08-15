@@ -1,0 +1,6 @@
+flask
+bleak
+requests
+# numpy only needed for trilateration (3+ sensors). Install on the Pi:
+# sudo apt install python3-numpy  OR  pip install numpy
+numpy

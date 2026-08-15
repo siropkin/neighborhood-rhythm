@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neighborhood Rhythm</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="refresh-indicator" id="refresh-indicator"></span>
+    Neighborhood Rhythm
+  </div>
+  <div class="header-right">
+    <span class="last-scan">last scan <b id="s-scan">—</b> ago</span>
+    <button class="btn-refresh" id="btn-refresh" title="refresh the dashboard now">
+      <span class="btn-refresh-icon">↻</span> Refresh
+      <span class="countdown" id="refresh-countdown">30s</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="stats-row" id="stats">
+    <span class="stat"><b id="s-wifi">0</b><label>wifi networks</label></span>
+    <span class="stat"><b id="s-total">0</b><label>devices</label></span>
+    <span class="stat"><b id="s-named">0</b><label>named</label></span>
+    <span class="stat"><b id="s-mine">0</b><label>mine</label></span>
+    <span class="stat"><b id="s-sensors">0</b><label>pis</label></span>
+  </section>
+
+  <div class="radar-row-wrap">
+    <section class="breakdown-panel">
+      <div class="panel-head"><h2>Device types</h2></div>
+      <div class="type-breakdown" id="type-breakdown"></div>
+    </section>
+
+    <section class="radar-panel">
+      <div class="panel-head"><h2>Radar</h2></div>
+      <canvas id="radar" width="360" height="360"></canvas>
+      <div class="legend" id="radar-legend"></div>
+    </section>
+  </div>
+
+  <section class="table-panel">
+    <div class="panel-head">
+      <h2>Devices</h2>
+      <input id="filter" type="search" placeholder="filter…" autocomplete="off">
+    </div>
+    <div class="table-wrap">
+      <table id="device-table">
+        <thead>
+          <tr>
+            <th data-sort="last_type">type</th>
+            <th data-sort="label">device</th>
+            <th data-sort="distance" class="num">dist</th>
+            <th data-sort="rssi" class="num">rssi</th>
+            <th data-sort="last_seen" class="num">last seen</th>
+            <th data-sort="is_mine" class="num">mine</th>
+          </tr>
+        </thead>
+        <tbody id="device-rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# data + caches (regenerated at runtime, never commit)
+rhythm.db
+rhythm.db-*
+oui.txt
+*.pyc
+__pycache__/
+*.log
+
+# local config overrides (contains peer tokens — keep private)
+config_local.py
+
+# venv
+venv/
+.venv/

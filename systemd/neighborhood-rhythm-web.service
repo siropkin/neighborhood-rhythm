@@ -1,0 +1,15 @@
+[Unit]
+Description=Neighborhood Rhythm web dashboard
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/siropkin/neighborhood-rhythm
+ExecStart=/home/siropkin/lightcontrol_venv/bin/gunicorn --workers 2 --threads 4 --keep-alive 120 --bind 0.0.0.0:8000 --chdir /home/siropkin/neighborhood-rhythm app:app
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=RHYTHM_SENSOR_ID=sivanpi
+
+[Install]
+WantedBy=multi-user.target
