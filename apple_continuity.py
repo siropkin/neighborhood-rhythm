@@ -1,11 +1,6 @@
 """Apple Continuity decoder. Parses the 0x004C manufacturer-data TLV chain
-that Apple devices broadcast, passively (no connection).
-
-Adapted from dkrugman/btviz/apple_continuity.py + furiousMAC/continuity specs.
-Layout: a sequence of [type:1][length:1][payload:length] TLVs after the
-2-byte company id (which bleak already strips — manufacturer_data[0x004c]
-starts at the first type byte).
-"""
+(passive, no connection). Adapted from dkrugman/btviz + furiousMAC/continuity.
+TLV layout: [type:1][length:1][payload:length], company id already stripped."""
 import struct
 
 # Apple Continuity type bytes

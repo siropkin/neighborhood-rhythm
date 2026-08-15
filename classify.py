@@ -8,8 +8,7 @@ def classify(raw):
     oui = (raw.get("oui_name") or "").lower()
     services = [s.lower() for s in (raw.get("services") or [])]
 
-    # 0. mDNS self-identification — highest confidence. The device's own model
-    # string or HomeKit category is authoritative.
+    # 0. mDNS self-identification — highest confidence (the device's own model/category).
     model = raw.get("model")
     category = raw.get("category")
     if category:
@@ -17,13 +16,12 @@ def classify(raw):
     if model:
         return {"type": "unknown", "label": model, "confidence": 0.75}
 
-    # 1. Name rules — highest confidence.
+    # 1. Name rules.
     for match, dev_type, label_fn, conf in NAME_RULES:
         if match(name):
             return {"type": dev_type, "label": label_fn(name), "confidence": conf}
 
-    # 2. Service UUID / mDNS rules. Substring match so '_spotify-connect._tcp'
-    # hits the '_spotify-connect' rule and '0000fea0-...' hits '0000fea0'.
+    # 2. Service UUID / mDNS rules (substring match).
     for svc in services:
         for key, (dev_type, label, conf) in SERVICE_RULES.items():
             if key in svc:

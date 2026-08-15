@@ -26,14 +26,13 @@ const fmtAgo = ts => {
   if (!ts) return '—';
   const s = Date.now()/1000 - ts;
   if (s < 60) return 'now';
-  if (s < 3600) return Math.floor(s/60) + 'm';
-  if (s < 86400) return Math.floor(s/3600) + 'h';
-  return Math.floor(s/86400) + 'd';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
 };
 const getJSON = async url => {
-  // Retry once on failure — gunicorn closes idle keep-alive connections and
-  // Chrome sometimes reuses a just-closed socket (ERR_SOCKET_NOT_CONNECTED).
-  // A second fetch opens a fresh connection and succeeds.
+  // Retry once: gunicorn closes idle keep-alive sockets and Chrome sometimes
+  // reuses a just-closed one (ERR_SOCKET_NOT_CONNECTED). A 2nd fetch succeeds.
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await fetch(url, { cache: 'no-store' });
@@ -48,9 +47,7 @@ const getJSON = async url => {
 let state = { devices: [], positions: {}, filter: '', sortKey: 'last_seen', sortDir: -1 };
 
 // ---------- Radar ----------
-// Pick ring bands that fit the real data. Scales down to sub-meter when
-// everything is close (e.g. max 1.4m -> 0.3/0.6/0.9/1.2/1.5), up to large
-// ranges when things are far. ~5 bands, rounded to a sensible precision.
+// Bands scale to the real data: sub-meter when everything's close, larger when far.
 function pickBands(maxDist) {
   const ceil = Math.max(maxDist, 0.5);
   // pick a "nice top" a bit above the real max, with precision that fits.
@@ -268,10 +265,8 @@ function updateCountdown() {
 }
 
 // ---------- live updates via SSE ----------
-// The collector writes sightings every 5 min; SSE pushes them the moment they
-// land. We throttle: a burst of sightings triggers ONE refresh, not one per
-// sighting (which exhausts the browser's connection pool). The server seeds
-// since=0 to the current max, so first connect doesn't replay all history.
+// SSE pushes new sightings the moment they land. Throttled: one refresh per
+// burst (not one per sighting — that exhausts the browser's connection pool).
 let lastSightingId = 0;
 let refreshPending = false;
 function startStream() {

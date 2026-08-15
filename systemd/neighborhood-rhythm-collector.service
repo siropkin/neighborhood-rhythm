@@ -4,8 +4,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-# Run as root so `iw dev wlan0 scan` works without a sudoers grant.
-# DB stays writable by the web service (same group / chmod below).
+# Root so `iw dev wlan0 scan` works without sudoers; chown hands DB back to siropkin.
 User=root
 Group=siropkin
 WorkingDirectory=/home/siropkin/neighborhood-rhythm
@@ -13,6 +12,5 @@ ExecStart=/home/siropkin/lightcontrol_venv/bin/python /home/siropkin/neighborhoo
 Environment=PYTHONUNBUFFERED=1
 Environment=RHYTHM_SENSOR_ID=sivanpi
 Environment=HOME=/home/siropkin
-# Backstop: a scan is BLE ~15s + WiFi ~17s + mDNS ~10s. 120s is generous but
-# bounded — without this a hung bleak scan blocks the timer indefinitely.
+# Backstop: a hung bleak scan blocks the timer without this.
 TimeoutStartSec=120

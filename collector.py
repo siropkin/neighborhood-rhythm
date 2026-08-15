@@ -1,6 +1,5 @@
-"""collector.py — runs BLE+BT+WiFi+mDNS scans, classifies, upserts to SQLite.
-Runs on a systemd timer (separate from the web process). Idempotent + resumable.
-"""
+"""collector.py — BLE+BT+WiFi+mDNS scans, classify, upsert to SQLite.
+Runs on a systemd timer (separate from the web process)."""
 import os
 import re
 import subprocess
@@ -21,7 +20,6 @@ def _now():
 
 
 # Per-class TX power defaults (dBm @ 1m) when the device doesn't advertise tx.
-# ponytail: rough defaults from research; refine after a week of data.
 _TX_DEFAULTS = {
     "phone": -65, "phone-anon": -65, "wearable": -75, "beacon": -59,
     "light": -59, "iot": -59, "iot-esp32": -59, "sensor": -59,
@@ -36,8 +34,7 @@ def _tx_default(dev_type):
 
 # --- BLE via bleak ---
 def scan_ble(timeout=10):
-    """Returns list of {mac, name, rssi, services}. Uses advertisement-data API
-    so rssi + service UUIDs are captured (the plain discover() form drops them)."""
+    """BLE scan. return_adv=True captures rssi + service UUIDs (plain discover() drops them)."""
     try:
         from bleak import BleakScanner  # type: ignore
     except ImportError:
@@ -48,12 +45,9 @@ def scan_ble(timeout=10):
         import asyncio
 
         async def _scan():
-            # return_adv=True gives (BLEDevice, AdvertisementData) per device.
             return await BleakScanner.discover(timeout=timeout, return_adv=True)
 
-        # Hard ceiling: bleak's internal timeout=10 is the polite exit; this
-        # outer wait_for kills the scan at 15s even if bleak hangs (BlueZ
-        # dbus can stall). Catch TimeoutError, degrade to [].
+        # Outer wait_for is a hard ceiling in case BlueZ/dbus stalls.
         devs = asyncio.run(asyncio.wait_for(_scan(), timeout=timeout + 5))
         for addr, (dev, adv) in devs.items():
             name = dev.name or getattr(adv, "local_name", "") or ""
@@ -139,9 +133,7 @@ HAP_CATEGORY = {
 
 
 def scan_mdns(timeout=8):
-    """Browse key mDNS service types, resolve TXT records. Returns list of
-    {name, service, hostname, model, category, txt} — model + category are the
-    enrichment wins (authoritative, from the device itself)."""
+    """Browse mDNS service types, resolve TXT records. Returns {name, service, hostname, model, category}."""
     try:
         from zeroconf import Zeroconf, ServiceBrowser
     except ImportError:
@@ -205,8 +197,6 @@ def _store_device(conn, raw, source):
     result = classify(raw)
     rssi = raw.get("rssi")
     tx_power = raw.get("tx_power")
-    # Distance: use tx_power as the reference when present (per-class default
-    # otherwise), then smooth at query time via a rolling median.
     ref = tx_power if tx_power is not None else _tx_default(result["type"])
     distance = _distance_from_rssi(rssi, ref) if rssi is not None else None
     services = ",".join(raw.get("services", []))
@@ -228,22 +218,18 @@ def main():
         for raw in scan_bt():
             if _store_device(conn, raw, "bt"):
                 n_dev += 1
-        # mDNS: no MAC, key by hostname+service as a pseudo-device
+        # mDNS: no MAC — key by hostname+service as a pseudo-device
         for raw in scan_mdns():
-            pseudo_mac = f"mdns:{raw.get('hostname') or raw.get('name')}:{raw.get('service')}"
-            raw["mac"] = pseudo_mac
+            raw["mac"] = f"mdns:{raw.get('hostname') or raw.get('name')}:{raw.get('service')}"
             raw["services"] = [raw.get("service", "")]
             if _store_device(conn, raw, "mdns"):
                 n_dev += 1
-        # WiFi APs
         n_ap = 0
         for ap in scan_wifi():
             bssid = ap.get("bssid")
             if bssid:
                 db.upsert_wifi_ap(conn, bssid, ap.get("ssid"), ap.get("signal"), ap.get("channel"), _now())
                 n_ap += 1
-        # Roll up the last couple hours + prune raw sightings older than retention.
-        # Keeps storage bounded; the hourly rollup preserves the rhythm forever.
         db.rollup_recent(conn, hours_back=2)
         db.prune_raw(conn, RETENTION_DAYS)
     _fix_db_perms()
@@ -251,15 +237,12 @@ def main():
 
 
 def _fix_db_perms():
-    """Collector runs as root; hand the DB back to the siropkin group so the
-    web service (running as siropkin) can read/write it. No-op if not root."""
-    import glob
+    """Hand the DB back to siropkin (collector runs as root). No-op if not root."""
     from config import DB_PATH
     if os.geteuid() != 0:
         return
     import pwd, grp
-    uid = pwd.getpwnam("siropkin").pw_uid
-    gid = grp.getgrnam("siropkin").gr_gid
+    uid, gid = pwd.getpwnam("siropkin").pw_uid, grp.getgrnam("siropkin").gr_gid
     for path in [DB_PATH, DB_PATH + "-wal", DB_PATH + "-shm"]:
         if os.path.exists(path):
             os.chown(path, uid, gid)

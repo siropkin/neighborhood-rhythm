@@ -162,20 +162,14 @@ def api_sensors():
 
 @app.route("/stream")
 def stream():
-    """Server-Sent Events: push new sightings to the dashboard live.
-    Polls SQLite for new sighting IDs since the last one the client saw.
-    One-way, auto-reconnects in the browser — no WebSocket framing needed."""
+    """SSE: push new sightings to the dashboard live."""
     import json as _json
 
-    # Read the since param inside the request context — the generator runs
-    # after the context is torn down, so request.args isn't available there.
-    # Use a list to hold the cursor so the generator can mutate it without
-    # Python treating it as an unbound local.
-    # since=0 (first connect) means "don't replay history, start from now" —
-    # otherwise we'd replay thousands of old sightings and exhaust the browser.
+    # Read since inside the request context (the generator outlives it).
+    # since=0 = "don't replay history" — seed to current max, else we'd
+    # replay thousands of old sightings and exhaust the browser.
     since = int(request.args.get("since", "0"))
     if since == 0:
-        # seed to the current max so we only push genuinely new sightings
         with db.get_db() as conn:
             row = conn.execute("SELECT MAX(id) m FROM sightings").fetchone()
             since = row["m"] if row and row["m"] else 0
@@ -191,8 +185,7 @@ def stream():
             for r in rows:
                 cursor[0] = r["id"]
                 yield f"data: {_json.dumps(dict(r))}\n\n"
-            # heartbeat so the connection stays alive + the client knows we're here
-            yield ": ping\n\n"
+            yield ": ping\n\n"  # heartbeat
             time.sleep(2)
 
     return Response(event_stream(), mimetype="text/event-stream",
@@ -201,11 +194,8 @@ def stream():
 
 @app.route("/api/stats")
 def api_stats():
-    # "current" = devices seen in the last 10 min (matches the table/radar).
-    # "total" = all devices ever seen (since the DB started).
-    # The stats row shows current by default; total is available too.
     now = time.time()
-    current_cutoff = now - 600  # 10 min, same as /api/now
+    current_cutoff = now - 600  # 10 min, matches /api/now
     with db.get_db() as conn:
         # current (active now)
         current = conn.execute(

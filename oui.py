@@ -29,8 +29,8 @@ def _load():
     if _needs_refresh():
         try:
             download_oui()
-        except Exception as e:
-            # ponytail: if offline and stale/missing, degrade to empty map; collector still runs.
+        except Exception:
+            # offline + no cached file: degrade to empty map; collector still runs.
             if not os.path.exists(OUI_PATH):
                 _cache = {}
                 return _cache

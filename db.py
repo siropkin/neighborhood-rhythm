@@ -29,20 +29,14 @@ CREATE TABLE IF NOT EXISTS sightings (
     services TEXT,
     source TEXT,
     tx_power REAL,
-    extra TEXT              -- JSON: decoded Apple Continuity, sensor payloads, etc.
+    extra TEXT              -- JSON: decoded Apple Continuity, sensor payloads
 );
--- Composite (mac, ts) serves: device history (ORDER BY ts), compute_position
--- (mac + time range, no sort), and the per-device latest-sighting lookup.
--- Drops the old single-column idx_sightings_mac + idx_sightings_sensor
--- (sensor_id alone isn't a query pattern; the sensor filter always pairs
--- with mac via this composite or with ts via idx_sightings_ts).
 CREATE INDEX IF NOT EXISTS idx_sightings_mac_ts ON sightings(mac, ts);
 CREATE INDEX IF NOT EXISTS idx_sightings_ts ON sightings(ts);
 CREATE INDEX IF NOT EXISTS idx_sightings_sensor_ts ON sightings(sensor_id, ts);
 
--- Hourly rollup of raw sightings. The "rhythm" lives here (count + time
--- spread), not in raw rows. Kept indefinitely; raw sightings are pruned
--- after RETENTION_DAYS (see config). One row per (hour, mac, sensor, tech).
+-- Hourly rollup: the rhythm (count + time spread) lives here, kept forever;
+-- raw sightings pruned after RETENTION_DAYS. One row per (hour, mac, sensor, tech).
 CREATE TABLE IF NOT EXISTS sightings_hourly (
     hour        INTEGER NOT NULL,   -- epoch sec truncated to the hour
     mac         TEXT    NOT NULL,
@@ -84,10 +78,7 @@ CREATE TABLE IF NOT EXISTS wifi_aps (
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    # WAL + synchronous=NORMAL: the critical Pi setting. FULL (default) fsyncs
-    # every commit and wears the SD card; NORMAL loses at most the last txn on
-    # power loss, acceptable for sightings. busy_timeout lets the writer wait
-    # instead of erroring on contention.
+    # synchronous=NORMAL (not FULL) avoids per-commit fsync — SD-card wear.
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=5000")
@@ -101,9 +92,8 @@ def get_db():
 def init_db():
     with get_db() as conn:
         conn.executescript(SCHEMA)
-        # Migrations: add columns added after the original schema. ALTER TABLE
-        # ADD COLUMN is idempotent-safe via pragma check (CREATE TABLE IF NOT
-        # EXISTS won't add a missing column to an existing table).
+        # Migrations: CREATE TABLE IF NOT EXISTS won't add a missing column
+        # to an existing table, so ALTER explicitly.
         cols = {r[1] for r in conn.execute("PRAGMA table_info(sightings)")}
         if "tx_power" not in cols:
             conn.execute("ALTER TABLE sightings ADD COLUMN tx_power REAL")
@@ -172,9 +162,7 @@ def register_sensor(conn, sensor_id, hostname, location_label=None, x=None, y=No
 
 
 def rollup_hour(conn, hour_start):
-    """Collapse one hour of raw sightings into sightings_hourly. Idempotent:
-    re-running for the same hour replaces the rollup row (PRIMARY KEY)."""
-    hour_end = hour_start + 3600
+    """Collapse one hour of raw sightings into sightings_hourly (idempotent via PRIMARY KEY)."""
     conn.execute(
         """INSERT OR REPLACE INTO sightings_hourly
            (hour, mac, sensor_id, source, n, rssi_avg, rssi_min, rssi_max,
@@ -185,27 +173,23 @@ def rollup_hour(conn, hour_start):
            FROM sightings
            WHERE ts >= ? AND ts < ?
            GROUP BY mac, sensor_id, source""",
-        (hour_start, hour_start, hour_end),
+        (hour_start, hour_start, hour_start + 3600),
     )
 
 
 def rollup_recent(conn, hours_back=2):
-    """Roll up the last few hours (catch-up). Called by the collector each run."""
     now = time.time()
     for h in range(hours_back + 1):
         rollup_hour(conn, int((now - h * 3600) // 3600 * 3600))
 
 
 def prune_raw(conn, retention_days):
-    """Delete raw sightings older than retention_days (already rolled up).
-    Keeps the hourly rollup forever; only raw rows are pruned."""
-    cutoff = time.time() - retention_days * 86400
-    conn.execute("DELETE FROM sightings WHERE ts < ?", (cutoff,))
+    """Delete raw sightings older than retention_days (already rolled up)."""
+    conn.execute("DELETE FROM sightings WHERE ts < ?", (time.time() - retention_days * 86400,))
 
 
 def latest_sighting_per_device(conn, cutoff_ts):
-    """Fast latest-sighting-per-device lookup for /api/now. Uses the (mac, ts)
-    composite index — one ordered scan per device, no per-row sort."""
+    """Latest sighting per device for /api/now — uses the (mac, ts) composite index."""
     return conn.execute(
         """SELECT d.*, s.rssi, s.distance, s.name, s.source, s.tx_power
            FROM devices d
@@ -218,9 +202,7 @@ def latest_sighting_per_device(conn, cutoff_ts):
 
 
 def smoothed_rssi(conn, mac, window=11):
-    """Rolling median of the last `window` RSSI readings for a device.
-    Cuts the ±50% per-sample distance noise far more than fixing the tx ref.
-    Returns None if no rssi readings."""
+    """Rolling-median RSSI over the last `window` readings — cuts per-sample distance noise."""
     rows = conn.execute(
         "SELECT rssi FROM sightings WHERE mac=? AND rssi IS NOT NULL ORDER BY ts DESC LIMIT ?",
         (mac, window),
@@ -228,8 +210,7 @@ def smoothed_rssi(conn, mac, window=11):
     if not rows:
         return None
     vals = sorted(r["rssi"] for r in rows)
-    n = len(vals)
-    return vals[n // 2]  # median
+    return vals[len(vals) // 2]
 
 
 if __name__ == "__main__":

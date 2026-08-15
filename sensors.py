@@ -1,10 +1,5 @@
-"""BLE service-data sensor decoder. Passively reads temp/humidity/battery/etc.
-from advertisement service_data — no connection, no key (except Xiaomi encrypted,
-which we skip).
-
-Families: BTHome v2 (0xFCD2), RuuviTag v5 (company 0x0499), Qingping (0xFDCD),
-Govee (0xEC88), ATC (0x181A). Routed by service UUID / company id.
-"""
+"""BLE service-data sensor decoder. Passive (no connection, no key).
+BTHome v2 (0xFCD2), RuuviTag v5 (0x0499), Govee (0xEC88). Routed by service UUID / company id."""
 import struct
 
 # BTHome v2 object ids -> (name, length, signed, factor)
