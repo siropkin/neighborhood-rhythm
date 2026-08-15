@@ -188,7 +188,21 @@ def stream():
 
 @app.route("/api/stats")
 def api_stats():
+    # "current" = devices seen in the last 10 min (matches the table/radar).
+    # "total" = all devices ever seen (since the DB started).
+    # The stats row shows current by default; total is available too.
+    now = time.time()
+    current_cutoff = now - 600  # 10 min, same as /api/now
     with db.get_db() as conn:
+        # current (active now)
+        current = conn.execute(
+            "SELECT COUNT(DISTINCT mac) c FROM sightings WHERE ts >= ?", (current_cutoff,)
+        ).fetchone()["c"]
+        current_named = conn.execute(
+            """SELECT COUNT(DISTINCT s.mac) c FROM sightings s JOIN devices d ON d.mac=s.mac
+               WHERE s.ts >= ? AND d.last_label IS NOT NULL""", (current_cutoff,)
+        ).fetchone()["c"]
+        # all-time
         total = conn.execute("SELECT COUNT(*) c FROM devices").fetchone()["c"]
         named = conn.execute("SELECT COUNT(*) c FROM devices WHERE last_label IS NOT NULL").fetchone()["c"]
         mine = conn.execute("SELECT COUNT(*) c FROM devices WHERE is_mine=1").fetchone()["c"]
@@ -198,6 +212,7 @@ def api_stats():
         n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors").fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
     return jsonify({
+        "current": current, "current_named": current_named,
         "total": total, "named": named, "mine": mine, "by_type": by_type,
         "wifi": n_ap, "sensors": n_sensors, "last_scan": last,
     })

@@ -218,8 +218,9 @@ async function refresh() {
     const [stats, now, positions] = await Promise.all([
       getJSON('/api/stats'), getJSON('/api/now'), getJSON('/api/positions'),
     ]);
+    document.getElementById('s-current').textContent = stats.current;
     document.getElementById('s-total').textContent = stats.total;
-    document.getElementById('s-named').textContent = stats.named;
+    document.getElementById('s-named').textContent = stats.current_named;
     document.getElementById('s-mine').textContent = stats.mine;
     document.getElementById('s-wifi').textContent = stats.wifi;
     document.getElementById('s-sensors').textContent = stats.sensors;
