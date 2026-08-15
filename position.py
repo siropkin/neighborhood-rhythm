@@ -8,8 +8,13 @@ import db
 
 
 def _distance_from_rssi(rssi, ref_rssi=-59, n=2.7):
-    """Log path-loss model: d = 10^((rssi - ref) / (10n))."""
-    return 10 ** ((rssi - ref_rssi) / (10 * n))
+    """Log path-loss model: d = 10^((ref - rssi) / (10n)).
+    ref_rssi = signal at 1m; weaker (more negative) rssi => larger distance.
+    NOTE: the sign matters — (ref - rssi), not (rssi - ref), or distance
+    shrinks as signal weakens (the bug that put everything at <1m)."""
+    if rssi is None:
+        return None
+    return 10 ** ((ref_rssi - rssi) / (10 * n))
 
 
 def _latest_per_sensor(rows):
