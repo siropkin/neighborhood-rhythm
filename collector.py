@@ -141,36 +141,42 @@ def scan_mdns(timeout=8):
 
     class Collect:
         def __init__(self):
-            self.seen = []
+            self.services = []  # (type_, name) pairs; resolve after browse
 
         def add_service(self, zc, type_, name):
-            info = zc.get_service_info(type_, name, timeout=2000)
-            if not info:
-                return
-            txt = info.decoded_properties or {}
-            self.seen.append({
-                "name": name.replace("." + type_, ""),
-                "service": type_,
-                "hostname": (info.server or "").rstrip("."),
-                "txt": txt,
-            })
+            self.services.append((type_, name))
 
-        update_service = lambda *a: None
-        remove_service = lambda *a: None
+        def update_service(self, zc, type_, name):
+            pass
 
-    import threading
+        def remove_service(self, zc, type_, name):
+            pass
+
     zc = Zeroconf()
     c = Collect()
     for t in MDNS_TYPES:
         ServiceBrowser(zc, t, c)
-    # let it discover for `timeout` seconds, then close
+    # let it discover for `timeout` seconds, then resolve on the main thread
+    # (not inside the browser callback) so zc.close() can't interrupt an
+    # in-flight get_service_info and drop a mid-resolve service.
     import time as _t
     _t.sleep(timeout)
+    seen = []
+    for type_, name in c.services:
+        info = zc.get_service_info(type_, name, timeout=2000)
+        if not info:
+            continue
+        seen.append({
+            "name": name.replace("." + type_, ""),
+            "service": type_,
+            "hostname": (info.server or "").rstrip("."),
+            "txt": info.decoded_properties or {},
+        })
     zc.close()
 
     # enrich each with model + category from the TXT records
     out = []
-    for d in c.seen:
+    for d in seen:
         txt = d.get("txt") or {}
         model = txt.get("model") or txt.get("md") or txt.get("ty") or txt.get("usb_MDL")
         category = None

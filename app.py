@@ -15,6 +15,17 @@ def _ts(t):
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t)) if t else None
 
 
+def _int_arg(name, default):
+    """Parse a query int; bad/missing → default. Never raises."""
+    v = request.args.get(name)
+    if v is None or not v.lstrip("-").isdigit():
+        return default
+    try:
+        return int(v)
+    except (ValueError, TypeError):
+        return default
+
+
 def _peer_auth(f):
     @wraps(f)
     def wrapped(*a, **kw):
@@ -58,18 +69,21 @@ def api_now():
 
 @app.route("/api/rhythm")
 def api_rhythm():
-    hours = int(request.args.get("hours", 24))
+    hours = _int_arg("hours", 24)
     since = time.time() - hours * 3600
     with db.get_db() as conn:
         rows = conn.execute(
             """SELECT mac, ts FROM sightings WHERE ts >= ? ORDER BY ts""", (since,)
         ).fetchall()
-    # bucket by hour
+    # bucket by hour. Key on the UTC epoch hour (stable, DST-proof) but
+    # label it in local time for display — avoids the DST fall-back collision
+    # where the same local "01:00" label occurs twice and merges two hours.
     buckets = {}
     for r in rows:
-        b = time.strftime("%Y-%m-%d %H:00", time.localtime(r["ts"]))
-        buckets.setdefault(b, set()).add(r["mac"])
-    series = [{"t": k, "count": len(v)} for k, v in sorted(buckets.items())]
+        hour = int(r["ts"] // 3600) * 3600
+        label = time.strftime("%Y-%m-%d %H:00", time.localtime(hour))
+        buckets.setdefault(hour, (set(), label))[0].add(r["mac"])
+    series = [{"t": lbl, "count": len(macs)} for _, (macs, lbl) in sorted(buckets.items())]
     return jsonify({"hours": hours, "series": series})
 
 
@@ -168,7 +182,7 @@ def stream():
     # Read since inside the request context (the generator outlives it).
     # since=0 = "don't replay history" — seed to current max, else we'd
     # replay thousands of old sightings and exhaust the browser.
-    since = int(request.args.get("since", "0"))
+    since = _int_arg("since", 0)
     if since == 0:
         with db.get_db() as conn:
             row = conn.execute("SELECT MAX(id) m FROM sightings").fetchone()
@@ -176,17 +190,28 @@ def stream():
     cursor = [since]
 
     def event_stream():
-        while True:
-            with db.get_db() as conn:
+        # One connection for the life of the generator — not per 2s loop.
+        # Otherwise each open dashboard tab holds a gunicorn worker thread
+        # and churns a connection forever; enough tabs exhaust the pool.
+        import sqlite3
+        from config import DB_PATH
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        try:
+            while True:
                 rows = conn.execute(
                     "SELECT id, mac, name, rssi, distance, ts, source FROM sightings WHERE id > ? ORDER BY id LIMIT 50",
                     (cursor[0],),
                 ).fetchall()
-            for r in rows:
-                cursor[0] = r["id"]
-                yield f"data: {_json.dumps(dict(r))}\n\n"
-            yield ": ping\n\n"  # heartbeat
-            time.sleep(2)
+                for r in rows:
+                    cursor[0] = r["id"]
+                    yield f"data: {_json.dumps(dict(r))}\n\n"
+                yield ": ping\n\n"  # heartbeat
+                time.sleep(2)
+        finally:
+            conn.close()
 
     return Response(event_stream(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

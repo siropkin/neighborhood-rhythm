@@ -272,11 +272,10 @@ function updateCountdown() {
 let lastSightingId = 0;
 let refreshPending = false;
 function startStream() {
-  const es = new EventSource('/stream?since=' + lastSightingId);
-  es.onmessage = (e) => {
+  const onmsg = (e) => {
     try {
       const s = JSON.parse(e.data);
-      if (s.id && s.id > lastSightingId) lastSightingId = s.id;
+      if (s.id > lastSightingId) lastSightingId = s.id;
       // throttle: one refresh per burst, not one per message
       if (!refreshPending) {
         refreshPending = true;
@@ -284,7 +283,19 @@ function startStream() {
       }
     } catch (err) { /* heartbeat or parse error — ignore */ }
   };
-  es.onerror = () => { /* EventSource auto-reconnects; nothing to do */ };
+  // EventSource auto-reconnect reuses the *original* URL — which still carries
+  // the stale since= from construction, so the server re-seeds to current MAX
+  // and sightings that arrived during the disconnect gap are lost. Rebuild
+  // with the live lastSightingId so the server replays from where we left off.
+  let es = new EventSource('/stream?since=' + lastSightingId);
+  es.onmessage = onmsg;
+  function onerror() {
+    es.close();
+    es = new EventSource('/stream?since=' + lastSightingId);
+    es.onmessage = onmsg;
+    es.onerror = onerror;
+  }
+  es.onerror = onerror;
 }
 
 refresh();
