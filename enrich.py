@@ -13,6 +13,11 @@ def enrich(raw):
     apple = decode_apple(mfr)
     if apple:
         out["apple"] = apple
+        # Keep the raw 0x004C payload hex so the auth tag (and any field we
+        # decode later) is backfillable without re-scanning. Small (≤31 bytes).
+        raw_apple = mfr.get("76") or mfr.get(0x004C)
+        if raw_apple:
+            out["apple"]["raw"] = raw_apple
 
     sensor = decode_sensor(raw)
     if sensor:

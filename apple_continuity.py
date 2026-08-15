@@ -52,8 +52,11 @@ def _parse_tlvs(data):
 def decode_proximity_pairing(payload):
     """0x07 — AirPods/Beats. Unencrypted: model, battery, color.
     Layout: prefix(1) | model(2 BE) | status(1) | battery(1) | charge(1) |
-            lidcount(1) | color(1) | suffix(1) | encdata(16)."""
-    if len(payload) < 9:
+            lidcount(1) | color(1) | suffix(1) | encdata(16).
+    Real AirPods payloads are ≥25 bytes (the 16-byte encrypted tail is the
+    giveaway). Shorter 0x07 TLVs are other Apple data mis-typed as pairing —
+    reject them so we don't emit garbage model codes."""
+    if len(payload) < 25 or payload[0] != 0x01:
         return None
     model = struct.unpack(">H", payload[1:3])[0]
     # battery byte: bits encode per-pod/case charge levels
@@ -69,15 +72,21 @@ def decode_proximity_pairing(payload):
 
 
 def decode_nearby_info(payload):
-    """0x10 — iPhone/iPad/Mac/Watch presence + action code."""
+    """0x10 — iPhone/iPad/Mac/Watch presence. The 3-byte auth tag at
+    offsets 16–18 is stable per device across MAC rotations (the basis of
+    the "Discontinued Privacy" tracking work) — it's our Apple device ID.
+    Action code (offset 5) is ephemeral state, not identity."""
     if len(payload) < 2:
         return None
-    action = payload[1]
-    return {
+    action = payload[5] if len(payload) > 5 else payload[1]
+    out = {
         "device": "Apple device (Nearby)",
         "action_code": action,
         "hint": NEARBY_ACTIONS.get(action, f"action {action:#x}"),
     }
+    if len(payload) >= 19:
+        out["auth_tag"] = payload[16:19].hex()
+    return out
 
 
 def decode_find_my(payload, is_airtag=False):
@@ -132,7 +141,12 @@ def decode_apple(manufacturer_data):
 
 
 if __name__ == "__main__":
-    # self-check: a known AirPods Pro 2 frame (model 0x1420)
-    # type=0x07, len=0x07, prefix=0x01, model=0x1420, status=0x01, batt=0x4f...
-    frame = bytes([0x07, 0x07, 0x01, 0x14, 0x20, 0x01, 0x4F, 0x00, 0x04])
-    print("AirPods frame:", decode_apple({"76": frame.hex()}))
+    # self-check: AirPods Pro 2 (model 0x1420) + Nearby Info (auth tag 839096).
+    ap = bytes([0x07, 25, 0x01, 0x14, 0x20, 0x01, 0x4F, 0x00, 0x04, 0x00, 0x00]) + bytes(16)
+    nb = bytearray(20); nb[5] = 0x0F; nb[16:19] = bytes.fromhex("839096")
+    print("AirPods:", decode_apple({"76": ap.hex()}))
+    nb_frame = (bytes([0x10, 20]) + bytes(nb)).hex()
+    print("Nearby:", decode_apple({"76": nb_frame}))
+    assert decode_apple({"76": ap.hex()})["model"] == "AirPods Pro (2nd gen)"
+    assert decode_apple({"76": nb_frame})["nearby"][0]["auth_tag"] == "839096"
+    print("OK")

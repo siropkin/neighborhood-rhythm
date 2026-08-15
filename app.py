@@ -216,6 +216,31 @@ def stream():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.route("/api/fingerprints")
+def api_fingerprints():
+    """Merged device fingerprints — shows which MACs were linked as one
+    physical device (cross-radio + rotation). Only clusters with >1 MAC."""
+    with db.get_db() as conn:
+        rows = conn.execute("""
+            SELECT f.fingerprint_id, f.device_class, f.label, f.sighting_count,
+                   f.confidence, f.first_seen, f.last_seen,
+                   COUNT(a.mac) AS n_aliases
+            FROM device_fingerprints f
+            JOIN device_aliases a ON f.fingerprint_id = a.fingerprint_id
+            GROUP BY f.fingerprint_id
+            HAVING n_aliases > 1
+            ORDER BY n_aliases DESC
+            LIMIT 50
+        """).fetchall()
+        out = []
+        for r in rows:
+            aliases = [dict(a) for a in conn.execute(
+                "SELECT mac, source, link_method, link_confidence FROM device_aliases "
+                "WHERE fingerprint_id=?", (r["fingerprint_id"],)).fetchall()]
+            out.append({**dict(r), "aliases": aliases})
+    return jsonify({"fingerprints": out})
+
+
 @app.route("/api/stats")
 def api_stats():
     now = time.time()
@@ -231,10 +256,13 @@ def api_stats():
             "SELECT last_type, COUNT(*) c FROM devices GROUP BY last_type").fetchall()}
         n_ap = conn.execute("SELECT COUNT(*) c FROM wifi_aps").fetchone()["c"]
         n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors").fetchone()["c"]
+        # dedup'd device count (fingerprints merge rotated MACs + cross-radio)
+        n_fp = conn.execute("SELECT COUNT(*) c FROM device_fingerprints").fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
     return jsonify({
         "current": current, "total": total, "by_type": by_type,
-        "wifi": n_ap, "sensors": n_sensors, "last_scan": last,
+        "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
+        "last_scan": last,
     })
 
 

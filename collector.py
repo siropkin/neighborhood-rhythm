@@ -234,6 +234,10 @@ def main():
                 n_ap += 1
         db.rollup_recent(conn, hours_back=2)
         db.prune_raw(conn, RETENTION_DAYS)
+        # recompute device fingerprints (cross-radio + rotation linking).
+        # cheap on ~1k devices; idempotent.
+        from fingerprint import fingerprint_all
+        fingerprint_all(conn)
     _fix_db_perms()
     print(f"scanned {n_dev} devices, {n_ap} APs, stored (sensor={SENSOR_ID})")
 

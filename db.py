@@ -71,6 +71,31 @@ CREATE TABLE IF NOT EXISTS wifi_aps (
     last_signal REAL,
     channel INTEGER
 );
+
+-- Device fingerprints: a stable identity above the rotating MAC layer.
+-- One physical device = one fingerprint_id, even across MAC rotations and
+-- across BLE/WiFi/mDNS radios. device_aliases maps many MACs → one fingerprint.
+CREATE TABLE IF NOT EXISTS device_fingerprints (
+    fingerprint_id  TEXT PRIMARY KEY,   -- uuid4, the stable device identity
+    device_class    TEXT,                -- classify() type (phone/speaker/...)
+    label           TEXT,                -- best human label
+    first_seen      REAL,
+    last_seen       REAL,
+    sighting_count  INTEGER DEFAULT 0,
+    confidence      REAL DEFAULT 0       -- max confidence of any link into this fp
+);
+CREATE TABLE IF NOT EXISTS device_aliases (
+    mac             TEXT PRIMARY KEY,   -- a MAC or mdns: pseudo-key
+    fingerprint_id  TEXT NOT NULL,      -- which physical device this is
+    source          TEXT,               -- ble / bt / mdns / wifi
+    first_seen      REAL,
+    last_seen       REAL,
+    sighting_count  INTEGER DEFAULT 0,
+    link_confidence REAL,               -- confidence of the link that put this MAC here
+    link_method     TEXT,               -- 'continuity' / 'cross-radio' / 'rotation' / 'direct'
+    FOREIGN KEY (fingerprint_id) REFERENCES device_fingerprints(fingerprint_id)
+);
+CREATE INDEX IF NOT EXISTS idx_aliases_fp ON device_aliases(fingerprint_id);
 """
 
 
@@ -99,6 +124,9 @@ def init_db():
             conn.execute("ALTER TABLE sightings ADD COLUMN tx_power REAL")
         if "extra" not in cols:
             conn.execute("ALTER TABLE sightings ADD COLUMN extra TEXT")
+        dcols = {r[1] for r in conn.execute("PRAGMA table_info(devices)")}
+        if "fingerprint_id" not in dcols:
+            conn.execute("ALTER TABLE devices ADD COLUMN fingerprint_id TEXT")
 
 
 def upsert_device(conn, mac, oui_name, ts, dev_type, label):

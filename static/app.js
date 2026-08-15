@@ -5,6 +5,8 @@ const TYPE_COLORS = {
   'phone-anon': '#7d85b0', 'apple-device': '#bbb', 'samsung-device': '#7fb3ff',
   'iot-esp32': '#56d364', iot: '#56d364', 'iot-serial': '#56d364',
   sensor: '#f0883e', thermostat: '#f0883e', 'google-device': '#4285f4',
+  bridge: '#8b949e', fan: '#79c0ff', lock: '#f0883e', outlet: '#56d364',
+  switch: '#56d364', camera: '#f0883e',
 };
 // Friendly display names for the raw type keys. Keys stay stable in the data.
 const TYPE_LABELS = {
@@ -18,6 +20,8 @@ const TYPE_LABELS = {
   tv: 'tv', speaker: 'speaker', light: 'light', phone: 'phone',
   laptop: 'laptop', tablet: 'tablet', vacuum: 'robot vacuum',
   sensor: 'sensor', thermostat: 'thermostat', unknown: 'unknown',
+  bridge: 'homekit bridge', fan: 'fan', lock: 'lock', outlet: 'outlet',
+  switch: 'switch', camera: 'camera',
   mine: '★ mine',
 };
 const typeLabel = t => TYPE_LABELS[t] || t;
