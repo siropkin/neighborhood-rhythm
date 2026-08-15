@@ -167,16 +167,21 @@ def stream():
     One-way, auto-reconnects in the browser — no WebSocket framing needed."""
     import json as _json
 
+    # Read the since param inside the request context — the generator runs
+    # after the context is torn down, so request.args isn't available there.
+    # Use a list to hold the cursor so the generator can mutate it without
+    # Python treating it as an unbound local.
+    cursor = [int(request.args.get("since", "0"))]
+
     def event_stream():
-        last_id = int(request.args.get("since", "0"))
         while True:
             with db.get_db() as conn:
                 rows = conn.execute(
                     "SELECT id, mac, name, rssi, distance, ts, source FROM sightings WHERE id > ? ORDER BY id LIMIT 50",
-                    (last_id,),
+                    (cursor[0],),
                 ).fetchall()
             for r in rows:
-                last_id = r["id"]
+                cursor[0] = r["id"]
                 yield f"data: {_json.dumps(dict(r))}\n\n"
             # heartbeat so the connection stays alive + the client knows we're here
             yield ": ping\n\n"
