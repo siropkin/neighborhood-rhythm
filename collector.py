@@ -120,6 +120,58 @@ def scan_wifi():
     return aps
 
 
+# --- LAN clients via the ARP table (WiFi devices on our own network) ---
+# scan_wifi sees APs (routers), not clients. The Pi is already on the network,
+# so its ARP table lists every device that's talked to it — phones, laptops,
+# cameras, IoT — with their MAC + IP. No monitor mode, no extra hardware.
+# A quick ping sweep populates the table; devices that block ICMP still show
+# if they've talked to the Pi recently (mDNS, the dashboard fetch, etc.).
+def scan_lan():
+    import ipaddress
+    # find our IPv4 subnet on wlan0
+    try:
+        r = subprocess.run(["ip", "-4", "addr", "show", "wlan0"],
+                           capture_output=True, text=True, timeout=5)
+        m = re.search(r"inet (\d+\.\d+\.\d+\.\d+)/(\d+)", r.stdout)
+        if not m:
+            return []
+        net = ipaddress.ip_network(f"{m.group(1)}/{m.group(2)}", strict=False)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    # ping sweep to populate the ARP table (devices that block ICMP won't
+    # reply, but many will; the rest are caught if they've talked recently).
+    # Parallel via a thread pool — 128 hosts in ~2s, not 128s.
+    import concurrent.futures
+    hosts = [str(h) for h in net.hosts() if str(h) != m.group(1)][:128]
+    def _ping(h):
+        subprocess.run(["ping", "-c1", "-W1", h], capture_output=True, timeout=2)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=64) as ex:
+            list(ex.map(_ping, hosts))
+    except Exception:
+        pass
+    # --- mDNS via zeroconf (resolves TXT records: model, category, WiFi MAC) ---
+    # read the ARP table — only reachable/stale entries with a MAC
+    try:
+        r = subprocess.run(["ip", "neigh", "show", "dev", "wlan0"],
+                           capture_output=True, text=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    out = []
+    mac_re = re.compile(r"[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}")
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 5 or parts[3] != "lladdr":
+            continue
+        ip = parts[0]
+        mac = parts[4]
+        if not mac_re.match(mac) or parts[-1] == "FAILED":
+            continue
+        # skip the router/gateway (it's an AP, not a client) — best-effort
+        out.append({"mac": mac, "ip": ip, "name": "", "rssi": None, "services": []})
+    return out
+
+
 # --- mDNS via zeroconf (resolves TXT records: model, category, WiFi MAC) ---
 # The service types that carry the richest data. Browse these explicitly rather
 # than a meta-browse — faster, and we only care about these.
@@ -233,6 +285,11 @@ def main():
             raw["mac"] = f"mdns:{raw.get('hostname') or raw.get('name')}"
             raw["services"] = [raw.get("service", "")]
             if _store_device(conn, raw, "mdns"):
+                n_dev += 1
+        # LAN clients: WiFi devices on our own network (ARP table). These are
+        # the actual devices (phones/laptops/cameras/IoT), not the APs.
+        for raw in scan_lan():
+            if _store_device(conn, raw, "wifi"):
                 n_dev += 1
         n_ap = 0
         for ap in scan_wifi():
