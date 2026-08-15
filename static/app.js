@@ -269,18 +269,21 @@ function updateCountdown() {
 
 // ---------- live updates via SSE ----------
 // The collector writes sightings every 5 min; SSE pushes them the moment they
-// land, so the dashboard refreshes instantly instead of waiting for the 30s
-// timer. Falls back to the timer if SSE drops (EventSource auto-reconnects).
+// land. We throttle: a burst of sightings triggers ONE refresh, not one per
+// sighting (which exhausts the browser's connection pool). The server seeds
+// since=0 to the current max, so first connect doesn't replay all history.
 let lastSightingId = 0;
+let refreshPending = false;
 function startStream() {
   const es = new EventSource('/stream?since=' + lastSightingId);
   es.onmessage = (e) => {
     try {
       const s = JSON.parse(e.data);
-      if (s.id && s.id > lastSightingId) {
-        lastSightingId = s.id;
-        refresh();          // new sighting landed — pull fresh state
-        resetTimer();       // restart the countdown
+      if (s.id && s.id > lastSightingId) lastSightingId = s.id;
+      // throttle: one refresh per burst, not one per message
+      if (!refreshPending) {
+        refreshPending = true;
+        setTimeout(() => { refreshPending = false; refresh(); resetTimer(); }, 1500);
       }
     } catch (err) { /* heartbeat or parse error — ignore */ }
   };

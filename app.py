@@ -171,7 +171,15 @@ def stream():
     # after the context is torn down, so request.args isn't available there.
     # Use a list to hold the cursor so the generator can mutate it without
     # Python treating it as an unbound local.
-    cursor = [int(request.args.get("since", "0"))]
+    # since=0 (first connect) means "don't replay history, start from now" —
+    # otherwise we'd replay thousands of old sightings and exhaust the browser.
+    since = int(request.args.get("since", "0"))
+    if since == 0:
+        # seed to the current max so we only push genuinely new sightings
+        with db.get_db() as conn:
+            row = conn.execute("SELECT MAX(id) m FROM sightings").fetchone()
+            since = row["m"] if row and row["m"] else 0
+    cursor = [since]
 
     def event_stream():
         while True:
