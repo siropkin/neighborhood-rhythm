@@ -10,4 +10,4 @@ Environment=RHYTHM_REPO=siropkin/neighborhood-rhythm
 Environment=RHYTHM_APP_DIR=/home/siropkin/neighborhood-rhythm
 Environment=RHYTHM_VENV=/home/siropkin/lightcontrol_venv/bin/python
 Environment=RHYTHM_STATE_DIR=/var/lib/neighborhood-rhythm
-Environment=HOME=/home/siropkin
+Environment=HOME=/root

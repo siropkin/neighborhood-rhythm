@@ -4,6 +4,8 @@ Each rule: (match_fn(raw) -> bool, type, label_fn(raw) -> str|None, confidence).
 import re
 
 # Service UUID / mDNS service -> type. Substring-matched against raw['services'].
+# UUIDs verified against the Bluetooth SIG member registry (via bleep-tool mirror)
+# and open-source BLE fingerprinting projects (rfparty, ble_monitor, adwatch).
 SERVICE_RULES = {
     # mDNS services (come as e.g. '_spotify-connect._tcp')
     "_airplay": ("speaker", "AirPlay speaker", 0.85),
@@ -17,12 +19,21 @@ SERVICE_RULES = {
     "_http._tcp": ("computer", "web server", 0.6),
     "_ssh._tcp": ("computer", "SSH host", 0.65),
     # BLE service UUIDs (16-bit, come as 0000xxxx-0000-1000-...)
-    "0000fef3": ("sensor", "sensor/beacon", 0.7),
-    "0000fff0": ("iot", "serial IoT", 0.7),
-    "0000fea0": ("speaker", "smart speaker", 0.6),   # member-assigned, often speakers
-    "00001812": ("sensor", "human-interface sensor", 0.6),
-    "0000fd82": ("iot", "BLE IoT", 0.55),
-    "0000fe2c": ("iot", "BLE IoT", 0.55),
+    "0000fea0": ("speaker", "Google/Nest smart speaker", 0.85),  # Google Cast setup (SIG: Google LLC)
+    "0000fe2c": ("phone", "Android device (Fast Pair)", 0.8),    # Google Fast Pair (SIG: Google LLC)
+    "0000fd82": ("tv", "Sony device", 0.8),                       # SIG: Sony Corporation (BRAVIA etc.)
+    "0000fcf1": ("sensor", "Find My / Nearby beacon", 0.7),      # Google Nearby Presence
+    "0000fcb2": ("apple-device", "Apple device (Continuity)", 0.8),  # Apple Continuity (Handoff/Find My)
+    "0000fca4": ("computer", "HP device", 0.7),                   # HP Inc.
+    "0000fdf7": ("computer", "HP device", 0.7),                   # HP Inc.
+    "0000fef3": ("sensor", "ChromeOS/Android Nearby", 0.65),      # Google Nearby Connections
+    "0000fff0": ("light", "LED controller / serial-BLE", 0.6),    # generic vendor UART (Awox/Santoker LED)
+    "00001812": ("sensor", "HID (keyboard/mouse/remote)", 0.7),  # HID Service
+    "0000af30": ("sensor", "mmWave radar / sensor", 0.55),        # LD2410 radar, cat printers, BMS (not unique)
+    # full 128-bit vendor UUIDs
+    "c74edd21": ("vacuum", "iRobot robot", 0.9),                  # iRobot Robot Control Command service
+    "06aa1910": ("iot", "IoT device", 0.5),                       # unregistered vendor UUID (Venus/etc.)
+    "fefe0000": ("iot", "IoT device", 0.5),                       # unregistered vendor UUID (QN-S500 etc.)
 }
 
 # Name patterns -> (type, label, confidence). Order matters: first match wins.
@@ -35,12 +46,18 @@ NAME_RULES = [
     (lambda n: "crystal uhd" in n or "cu8000" in n, "tv", lambda n: "Samsung TV", 0.9),
     (lambda n: "iphone" in n, "phone", lambda n: "iPhone", 0.9),
     (lambda n: "ipad" in n, "tablet", lambda n: "iPad", 0.9),
-    (lambda n: "kitchen speaker" in n, "speaker", lambda n: "smart speaker", 0.8),
+    (lambda n: "kitchen speaker" in n, "speaker", lambda n: "Google/Nest smart speaker", 0.8),
     (lambda n: "spotifyconnect" in n, "speaker", lambda n: "Spotify Connect speaker", 0.85),
     (lambda n: "yandexio" in n or "yandex" in n, "speaker", lambda n: "Yandex smart speaker", 0.85),
     (lambda n: n.startswith("sivanpi") or "workstation" in n, "computer", lambda n: "computer", 0.8),
+    # iRobot operational name: single letter + 5-6 digits (N185020, Q312020, Y014020)
+    (lambda n: bool(re.match(r"^[a-z]\d{4,6}$", n)), "vacuum", lambda n: "iRobot robot (Roomba/Braava)", 0.75),
+    (lambda n: "roomba" in n or "braava" in n or "altadena" in n, "vacuum", lambda n: "iRobot robot", 0.9),
+    # Levoit air purifier: LAP-V201S-* (VeSync ecosystem), despite ESP32 OUI
+    (lambda n: n.startswith("lap-"), "sensor", lambda n: "Levoit air purifier", 0.85),
+    # ELK LED strip controllers
+    (lambda n: "elk-ble" in n, "light", lambda n: "BLE LED strip controller", 0.85),
     (lambda n: "venus_" in n, "iot", lambda n: "Venus IoT device", 0.7),
-    (lambda n: "elk-ble" in n, "iot", lambda n: "ELK BLE device", 0.7),
     (lambda n: "apple" in n, "apple-device", lambda n: "Apple device", 0.8),
     (lambda n: "samsung" in n, "samsung-device", lambda n: "Samsung device", 0.75),
     (lambda n: "espressif" in n or "esp32" in n, "iot", lambda n: "ESP32 IoT", 0.8),

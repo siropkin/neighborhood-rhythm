@@ -30,6 +30,8 @@ echo "new release: $LATEST (was ${CURRENT:-none}) — updating..."
 
 cd "$APP_DIR"
 # ponytail: hard reset to avoid local drift; the Pi should never hold uncommitted edits.
+# safe.directory: the repo is owned by siropkin but this script runs as root.
+git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 git fetch --tags origin
 git reset --hard "$LATEST"
 git checkout "$LATEST"
