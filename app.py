@@ -252,7 +252,11 @@ def api_stats():
         ).fetchone()["c"]
         # all-time
         total = conn.execute("SELECT COUNT(*) c FROM devices").fetchone()["c"]
-        n_ap = conn.execute("SELECT COUNT(*) c FROM wifi_aps").fetchone()["c"]
+        # distinct WiFi networks (not radios): one Xfinity box advertises many
+        # BSSIDs. Empty/hidden SSIDs collapse to a single "(hidden)" network.
+        n_ap = conn.execute(
+            "SELECT COUNT(DISTINCT COALESCE(NULLIF(ssid,''), '(hidden)')) c FROM wifi_aps"
+        ).fetchone()["c"]
         n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors").fetchone()["c"]
         # dedup'd device count (fingerprints merge rotated MACs + cross-radio)
         n_fp = conn.execute("SELECT COUNT(*) c FROM device_fingerprints").fetchone()["c"]

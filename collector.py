@@ -94,14 +94,20 @@ def scan_wifi():
         return []
     aps = []
     cur = {}
+    mac_re = re.compile(r"^[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}$")
     for line in r.stdout.splitlines():
         line = line.strip()
         if line.startswith("BSS "):
             if cur.get("bssid"):
                 aps.append(cur)
-            cur = {"bssid": line.split()[1].split("(")[0]}
+            # iw emits "BSS Load:" (the BSS Load element) as a sub-line; after
+            # strip() it matches "BSS " — reject anything that isn't a real MAC.
+            bssid = line.split()[1].split("(")[0]
+            cur = {"bssid": bssid} if mac_re.match(bssid) else {}
         elif line.startswith("SSID:"):
-            cur["ssid"] = line.split(":", 1)[1].strip()
+            ssid = line.split(":", 1)[1].strip()
+            # null-byte / unprintable SSIDs from misbehaving APs -> hidden
+            cur["ssid"] = ssid if ssid and "\x00" not in ssid else None
         elif line.startswith("freq:"):
             # freq MHz -> channel. 2.4GHz: 2412=ch1..; 5GHz: 5000+ch*5 (5180=ch36).
             freq = int(float(line.split(":")[1].strip()))
