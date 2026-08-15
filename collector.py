@@ -10,7 +10,7 @@ import time
 import db
 import oui
 from classify import classify
-from config import SENSOR_ID
+from config import SENSOR_ID, RETENTION_DAYS
 from position import _distance_from_rssi
 from rules import is_random_mac
 
@@ -168,6 +168,10 @@ def main():
             if bssid:
                 db.upsert_wifi_ap(conn, bssid, ap.get("ssid"), ap.get("signal"), ap.get("channel"), _now())
                 n_ap += 1
+        # Roll up the last couple hours + prune raw sightings older than retention.
+        # Keeps storage bounded; the hourly rollup preserves the rhythm forever.
+        db.rollup_recent(conn, hours_back=2)
+        db.prune_raw(conn, RETENTION_DAYS)
     _fix_db_perms()
     print(f"scanned {n_dev} devices, {n_ap} APs, stored (sensor={SENSOR_ID})")
 

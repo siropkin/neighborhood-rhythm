@@ -51,14 +51,7 @@ def device_page(mac):
 def api_now():
     cutoff = time.time() - 600  # seen in last 10 min
     with db.get_db() as conn:
-        rows = conn.execute(
-            """SELECT d.*, s.rssi, s.distance, s.name, s.source
-               FROM devices d
-               JOIN sightings s ON s.id = (
-                   SELECT id FROM sightings WHERE mac = d.mac ORDER BY ts DESC LIMIT 1)
-               WHERE d.last_seen >= ?""",
-            (cutoff,),
-        ).fetchall()
+        rows = db.latest_sighting_per_device(conn, cutoff)
         devices = [dict(r) for r in rows]
     return jsonify({"ts": time.time(), "sensor_id": SENSOR_ID, "devices": devices})
 

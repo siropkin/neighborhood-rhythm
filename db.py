@@ -3,7 +3,7 @@ import sqlite3
 import time
 from contextlib import contextmanager
 
-from config import DB_PATH
+from config import DB_PATH, RETENTION_DAYS, DEDUP_WINDOW_S
 
 
 SCHEMA = """
@@ -29,9 +29,35 @@ CREATE TABLE IF NOT EXISTS sightings (
     services TEXT,
     source TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_sightings_mac ON sightings(mac);
-CREATE INDEX IF NOT EXISTS idx_sightings_sensor ON sightings(sensor_id);
+-- Composite (mac, ts) serves: device history (ORDER BY ts), compute_position
+-- (mac + time range, no sort), and the per-device latest-sighting lookup.
+-- Drops the old single-column idx_sightings_mac + idx_sightings_sensor
+-- (sensor_id alone isn't a query pattern; the sensor filter always pairs
+-- with mac via this composite or with ts via idx_sightings_ts).
+CREATE INDEX IF NOT EXISTS idx_sightings_mac_ts ON sightings(mac, ts);
 CREATE INDEX IF NOT EXISTS idx_sightings_ts ON sightings(ts);
+CREATE INDEX IF NOT EXISTS idx_sightings_sensor_ts ON sightings(sensor_id, ts);
+
+-- Hourly rollup of raw sightings. The "rhythm" lives here (count + time
+-- spread), not in raw rows. Kept indefinitely; raw sightings are pruned
+-- after RETENTION_DAYS (see config). One row per (hour, mac, sensor, tech).
+CREATE TABLE IF NOT EXISTS sightings_hourly (
+    hour        INTEGER NOT NULL,   -- epoch sec truncated to the hour
+    mac         TEXT    NOT NULL,
+    sensor_id   TEXT    NOT NULL,
+    source      TEXT    NOT NULL,
+    n           INTEGER NOT NULL,   -- sighting count = the rhythm signal
+    rssi_avg    REAL,
+    rssi_min    REAL,
+    rssi_max    REAL,
+    distance_avg REAL,
+    first_ts    REAL,
+    last_ts     REAL,
+    PRIMARY KEY (hour, mac, sensor_id, source)
+);
+CREATE INDEX IF NOT EXISTS idx_hourly_mac_hour ON sightings_hourly(mac, hour);
+CREATE INDEX IF NOT EXISTS idx_hourly_hour ON sightings_hourly(hour);
+
 CREATE TABLE IF NOT EXISTS sensors (
     sensor_id TEXT PRIMARY KEY,
     hostname TEXT,
@@ -56,7 +82,13 @@ CREATE TABLE IF NOT EXISTS wifi_aps (
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    # WAL + synchronous=NORMAL: the critical Pi setting. FULL (default) fsyncs
+    # every commit and wears the SD card; NORMAL loses at most the last txn on
+    # power loss, acceptable for sightings. busy_timeout lets the writer wait
+    # instead of erroring on contention.
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     try:
         yield conn
         conn.commit()
@@ -84,10 +116,17 @@ def upsert_device(conn, mac, oui_name, ts, dev_type, label):
 
 
 def insert_sighting(conn, mac, sensor_id, ts, rssi, distance, name, services, source):
+    # Dedup guard: bleak can double-callback the same device within a scan.
+    # Same mac + sensor within DEDUP_WINDOW_S is one sighting, not two.
     conn.execute(
         """INSERT INTO sightings(mac, sensor_id, ts, rssi, distance, name, services, source)
-           VALUES(?,?,?,?,?,?,?,?)""",
-        (mac, sensor_id, ts, rssi, distance, name, services, source),
+           SELECT ?,?,?,?,?,?,?,?
+           WHERE NOT EXISTS (
+             SELECT 1 FROM sightings
+             WHERE mac=? AND sensor_id=? AND ts BETWEEN ? AND ?
+           )""",
+        (mac, sensor_id, ts, rssi, distance, name, services, source,
+         mac, sensor_id, ts - DEDUP_WINDOW_S, ts),
     )
 
 
@@ -117,6 +156,52 @@ def register_sensor(conn, sensor_id, hostname, location_label=None, x=None, y=No
              y=COALESCE(excluded.y, sensors.y)""",
         (sensor_id, hostname, now, now, location_label, x, y),
     )
+
+
+def rollup_hour(conn, hour_start):
+    """Collapse one hour of raw sightings into sightings_hourly. Idempotent:
+    re-running for the same hour replaces the rollup row (PRIMARY KEY)."""
+    hour_end = hour_start + 3600
+    conn.execute(
+        """INSERT OR REPLACE INTO sightings_hourly
+           (hour, mac, sensor_id, source, n, rssi_avg, rssi_min, rssi_max,
+            distance_avg, first_ts, last_ts)
+           SELECT ?, mac, sensor_id, source, COUNT(*),
+                  AVG(rssi), MIN(rssi), MAX(rssi), AVG(distance),
+                  MIN(ts), MAX(ts)
+           FROM sightings
+           WHERE ts >= ? AND ts < ?
+           GROUP BY mac, sensor_id, source""",
+        (hour_start, hour_start, hour_end),
+    )
+
+
+def rollup_recent(conn, hours_back=2):
+    """Roll up the last few hours (catch-up). Called by the collector each run."""
+    now = time.time()
+    for h in range(hours_back + 1):
+        rollup_hour(conn, int((now - h * 3600) // 3600 * 3600))
+
+
+def prune_raw(conn, retention_days):
+    """Delete raw sightings older than retention_days (already rolled up).
+    Keeps the hourly rollup forever; only raw rows are pruned."""
+    cutoff = time.time() - retention_days * 86400
+    conn.execute("DELETE FROM sightings WHERE ts < ?", (cutoff,))
+
+
+def latest_sighting_per_device(conn, cutoff_ts):
+    """Fast latest-sighting-per-device lookup for /api/now. Uses the (mac, ts)
+    composite index — one ordered scan per device, no per-row sort."""
+    return conn.execute(
+        """SELECT d.*, s.rssi, s.distance, s.name, s.source
+           FROM devices d
+           JOIN sightings s ON s.id = (
+               SELECT id FROM sightings
+               WHERE mac = d.mac AND ts >= ? ORDER BY ts DESC LIMIT 1)
+           WHERE d.last_seen >= ?""",
+        (cutoff_ts, cutoff_ts),
+    ).fetchall()
 
 
 if __name__ == "__main__":
