@@ -3,10 +3,19 @@ from rules import NAME_RULES, OUI_RULES, SERVICE_RULES, is_random_mac
 
 
 def classify(raw):
-    """raw: {mac, name, oui_name, services, is_random}"""
+    """raw: {mac, name, oui_name, services, is_random, model, category}"""
     name = (raw.get("name") or "").lower()
     oui = (raw.get("oui_name") or "").lower()
     services = [s.lower() for s in (raw.get("services") or [])]
+
+    # 0. mDNS self-identification — highest confidence. The device's own model
+    # string or HomeKit category is authoritative.
+    model = raw.get("model")
+    category = raw.get("category")
+    if category:
+        return {"type": category, "label": model or category, "confidence": 0.9}
+    if model:
+        return {"type": "unknown", "label": model, "confidence": 0.75}
 
     # 1. Name rules — highest confidence.
     for match, dev_type, label_fn, conf in NAME_RULES:

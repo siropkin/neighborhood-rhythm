@@ -160,6 +160,32 @@ def api_sensors():
     return jsonify({"sensors": [dict(r) for r in rows]})
 
 
+@app.route("/stream")
+def stream():
+    """Server-Sent Events: push new sightings to the dashboard live.
+    Polls SQLite for new sighting IDs since the last one the client saw.
+    One-way, auto-reconnects in the browser — no WebSocket framing needed."""
+    import json as _json
+
+    def event_stream():
+        last_id = int(request.args.get("since", "0"))
+        while True:
+            with db.get_db() as conn:
+                rows = conn.execute(
+                    "SELECT id, mac, name, rssi, distance, ts, source FROM sightings WHERE id > ? ORDER BY id LIMIT 50",
+                    (last_id,),
+                ).fetchall()
+            for r in rows:
+                last_id = r["id"]
+                yield f"data: {_json.dumps(dict(r))}\n\n"
+            # heartbeat so the connection stays alive + the client knows we're here
+            yield ": ping\n\n"
+            time.sleep(2)
+
+    return Response(event_stream(), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @app.route("/api/stats")
 def api_stats():
     with db.get_db() as conn:

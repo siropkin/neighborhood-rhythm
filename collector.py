@@ -120,33 +120,77 @@ def scan_wifi():
     return aps
 
 
-# --- mDNS via avahi-browse ---
-def scan_mdns(timeout=5):
+# --- mDNS via zeroconf (resolves TXT records: model, category, WiFi MAC) ---
+# The service types that carry the richest data. Browse these explicitly rather
+# than a meta-browse — faster, and we only care about these.
+MDNS_TYPES = [
+    "_airplay._tcp.local.", "_googlecast._tcp.local.", "_raop._tcp.local.",
+    "_spotify-connect._tcp.local.", "_hap._tcp.local.", "_ipp._tcp.local.",
+    "_smb._tcp.local.", "_ssh._tcp.local.", "_esphome._tcp.local.",
+    "_yandexio._tcp.local.",
+]
+
+# HomeKit category IDs (from _hap txt 'ci') -> our type taxonomy
+HAP_CATEGORY = {
+    1: "bridge", 2: "fan", 4: "light", 5: "lock", 6: "outlet", 7: "switch",
+    8: "thermostat", 9: "sensor", 10: "security", 16: "camera", 17: "doorbell",
+    18: "air purifier", 22: "speaker",
+}
+
+
+def scan_mdns(timeout=8):
+    """Browse key mDNS service types, resolve TXT records. Returns list of
+    {name, service, hostname, model, category, txt} — model + category are the
+    enrichment wins (authoritative, from the device itself)."""
     try:
-        r = subprocess.run(
-            ["avahi-browse", "-a", "-r", "-t"],
-            capture_output=True, text=True, timeout=timeout + 5,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        from zeroconf import Zeroconf, ServiceBrowser
+    except ImportError:
         return []
+
+    class Collect:
+        def __init__(self):
+            self.seen = []
+
+        def add_service(self, zc, type_, name):
+            info = zc.get_service_info(type_, name, timeout=2000)
+            if not info:
+                return
+            txt = info.decoded_properties or {}
+            self.seen.append({
+                "name": name.replace("." + type_, ""),
+                "service": type_,
+                "hostname": (info.server or "").rstrip("."),
+                "txt": txt,
+            })
+
+        update_service = lambda *a: None
+        remove_service = lambda *a: None
+
+    import threading
+    zc = Zeroconf()
+    c = Collect()
+    for t in MDNS_TYPES:
+        ServiceBrowser(zc, t, c)
+    # let it discover for `timeout` seconds, then close
+    import time as _t
+    _t.sleep(timeout)
+    zc.close()
+
+    # enrich each with model + category from the TXT records
     out = []
-    cur = {}
-    for line in r.stdout.splitlines():
-        if line.startswith("="):
-            # = wlan0 IPv4 MacBook Pro _airplay._tcp local
-            parts = line.split()
-            if len(parts) >= 5:
-                cur = {"name": " ".join(parts[3:-2]), "service": parts[-2], "mac": None, "rssi": None}
-        elif line.startswith("   hostname ="):
-            cur["hostname"] = line.split("=", 1)[1].strip().rstrip(".")
-        elif line.startswith("   address =") and "mac" not in cur:
-            # avahi gives IP, not MAC; we key mDNS by hostname+service
-            pass
-        elif line == "" and cur:
-            out.append(cur)
-            cur = {}
-    if cur:
-        out.append(cur)
+    for d in c.seen:
+        txt = d.get("txt") or {}
+        model = txt.get("model") or txt.get("md") or txt.get("ty") or txt.get("usb_MDL")
+        category = None
+        ci = txt.get("ci")
+        if ci and ci.isdigit():
+            category = HAP_CATEGORY.get(int(ci))
+        d["model"] = model
+        d["category"] = category
+        d["mac"] = None
+        d["rssi"] = None
+        d["services"] = [d["service"]]
+        out.append(d)
     return out
 
 

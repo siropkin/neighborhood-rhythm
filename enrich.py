@@ -11,7 +11,8 @@ from sensors import decode_sensor
 
 def enrich(raw):
     """raw: the BLE scan dict (mac, name, rssi, tx_power, services,
-    manufacturer_data, service_data). Returns decoded dict or None."""
+    manufacturer_data, service_data) OR an mDNS dict (model, category, txt).
+    Returns decoded dict or None."""
     out = {}
     mfr = raw.get("manufacturer_data") or {}
     svc = raw.get("service_data") or {}
@@ -25,6 +26,17 @@ def enrich(raw):
     sensor = decode_sensor(raw)
     if sensor:
         out["sensor"] = sensor
+
+    # mDNS: model + category from TXT records (already parsed by scan_mdns)
+    if raw.get("model") or raw.get("category"):
+        mdns = {}
+        if raw.get("model"):
+            mdns["model"] = raw["model"]
+        if raw.get("category"):
+            mdns["category"] = raw["category"]
+        if raw.get("hostname"):
+            mdns["hostname"] = raw["hostname"]
+        out["mdns"] = mdns
 
     return out or None
 

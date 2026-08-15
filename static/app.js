@@ -268,5 +268,26 @@ function updateCountdown() {
   if (el) el.textContent = secsLeft + 's';
 }
 
+// ---------- live updates via SSE ----------
+// The collector writes sightings every 5 min; SSE pushes them the moment they
+// land, so the dashboard refreshes instantly instead of waiting for the 30s
+// timer. Falls back to the timer if SSE drops (EventSource auto-reconnects).
+let lastSightingId = 0;
+function startStream() {
+  const es = new EventSource('/stream?since=' + lastSightingId);
+  es.onmessage = (e) => {
+    try {
+      const s = JSON.parse(e.data);
+      if (s.id && s.id > lastSightingId) {
+        lastSightingId = s.id;
+        refresh();          // new sighting landed — pull fresh state
+        resetTimer();       // restart the countdown
+      }
+    } catch (err) { /* heartbeat or parse error — ignore */ }
+  };
+  es.onerror = () => { /* EventSource auto-reconnects; nothing to do */ };
+}
+
 refresh();
 resetTimer();
+startStream();
