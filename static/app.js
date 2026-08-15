@@ -220,7 +220,6 @@ async function refresh() {
     ]);
     document.getElementById('s-current').textContent = stats.current;
     document.getElementById('s-total').textContent = stats.total;
-    document.getElementById('s-mine').textContent = stats.mine;
     document.getElementById('s-wifi').textContent = stats.wifi;
     document.getElementById('s-sensors').textContent = stats.sensors;
     document.getElementById('s-scan').textContent = fmtAgo(stats.last_scan);
