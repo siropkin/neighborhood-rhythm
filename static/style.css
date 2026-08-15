@@ -63,9 +63,11 @@ h2 {
 
 /* layout — stats row, then radar+breakdown row, then table */
 main {
-  display: flex; flex-direction: column; gap: 20px;
+  display: flex; flex-direction: column;
   max-width: 1200px; margin: 0 auto; padding: 20px;
 }
+/* content wrapper holds the gap between tiles (was on main before the #content wrapper) */
+#content { display: flex; flex-direction: column; gap: 20px; }
 /* first-load state: centered viewport overlay, content hidden until data arrives */
 .loading {
   position: fixed; inset: 0; z-index: 50;

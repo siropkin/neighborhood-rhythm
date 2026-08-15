@@ -35,6 +35,9 @@ git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 git fetch --tags origin
 git reset --hard "$LATEST"
 git checkout "$LATEST"
+# git reset ran as root -> files are now root-owned; hand them back to siropkin
+# so the web service (running as siropkin) can read them and manual edits work.
+chown -R siropkin:siropkin "$APP_DIR"
 
 # restart services so new code is live
 sudo systemctl restart neighborhood-rhythm-web.service
