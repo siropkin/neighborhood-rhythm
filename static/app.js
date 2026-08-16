@@ -207,6 +207,45 @@ function renderTable() {
   });
 }
 
+// ---------- rogue devices (new stable-MAC devices not in baseline) ----------
+async function rogueAction(mac, endpoint, body) {
+  try {
+    await fetch(endpoint, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body || {}),
+    });
+    refresh();
+  } catch (e) { console.error('rogue action failed', e); }
+}
+function renderRogue(rogues) {
+  const panel = document.getElementById('rogue-panel');
+  if (!panel) return;
+  const tb = document.getElementById('rogue-rows');
+  const count = document.getElementById('rogue-count');
+  if (!rogues || !rogues.length) {
+    panel.hidden = true;
+    tb.innerHTML = '';
+    return;
+  }
+  panel.hidden = false;
+  count.textContent = rogues.length;
+  tb.innerHTML = rogues.map(r => `
+    <tr>
+      <td class="dev-name"><b>${r.label || r.mac}</b> <span class="mono dev-mac">${r.mac}</span></td>
+      <td>${r.oui_name || '—'}</td>
+      <td><span class="type-chip">${typeLabel(r.device_class || '?')}</span></td>
+      <td class="num">${fmtAgo(r.first_seen)}</td>
+      <td class="rogue-actions">
+        <button class="rogue-btn known" data-mac="${r.mac}">known</button>
+        <button class="rogue-btn dismiss" data-mac="${r.mac}">dismiss</button>
+      </td>
+    </tr>`).join('');
+  tb.querySelectorAll('button.known').forEach(b => b.onclick = () =>
+    rogueAction(b.dataset.mac, '/api/rogue/known', {mac: b.dataset.mac}));
+  tb.querySelectorAll('button.dismiss').forEach(b => b.onclick = () =>
+    rogueAction(b.dataset.mac, `/api/rogue/${encodeURIComponent(b.dataset.mac)}/resolve`, {}));
+}
+
 // ---------- refresh ----------
 const REFRESH_MS = 30000;
 let refreshTimer, countdownTimer, secsLeft = 30;
@@ -219,8 +258,9 @@ function setIndicators(state) {
 async function refresh() {
   setIndicators('active');
   try {
-    const [stats, now, positions] = await Promise.all([
+    const [stats, now, positions, rogues] = await Promise.all([
       getJSON('/api/stats'), getJSON('/api/now'), getJSON('/api/positions'),
+      getJSON('/api/rogue'),
     ]);
     document.getElementById('s-current').textContent = stats.current;
     document.getElementById('s-total').textContent = stats.total;
@@ -233,6 +273,7 @@ async function refresh() {
     renderLegend();
     renderTypeBreakdown();
     renderTable();
+    renderRogue(rogues.rogues);
     setIndicators('ok');
     // hide the first-load overlay + reveal content once we have data
     const loading = document.getElementById('loading');

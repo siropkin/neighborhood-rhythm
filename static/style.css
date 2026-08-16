@@ -215,3 +215,17 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .d-name { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; padding: 4px 8px; background: var(--surface-2); border-radius: 4px; }
 .d-tag-input { margin-top: 8px; width: 100%; padding: 8px; font-size: 13px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
 .d-tag-input:focus { outline: none; border-color: var(--accent); }
+
+/* ---- rogue panel (new devices) ---- */
+.rogue-panel { background: var(--surface); border: 1px solid #da3633; border-radius: 10px; padding: 16px 20px; margin-bottom: 18px; }
+.rogue-panel .panel-head { display: flex; align-items: center; gap: 10px; }
+.rogue-panel h2 { color: #f85149; }
+.rogue-count { background: #da3633; color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; font-variant-numeric: tabular-nums; }
+.rogue-hint { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
+.rogue-panel table th { text-transform: uppercase; font-size: 10px; color: var(--muted); letter-spacing: .04em; }
+.rogue-panel td { padding: 8px 10px; }
+.rogue-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.rogue-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.rogue-btn:hover { border-color: var(--accent); }
+.rogue-btn.known:hover { border-color: #2ea043; color: #2ea043; }
+.rogue-btn.dismiss:hover { border-color: #f85149; color: #f85149; }
