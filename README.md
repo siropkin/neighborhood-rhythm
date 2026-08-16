@@ -2,7 +2,7 @@
 
 **A passive BLE / WiFi / mDNS environment scanner with a live radar dashboard, built for a Raspberry Pi.**
 
-Neighborhood Rhythm listens to the radio neighborhood around your Pi, classifies every device it hears, and draws the "rhythm" of devices coming and going on a live web dashboard. It scans passively (no BLE connections), decodes Apple Continuity and BLE sensor payloads, estimates distance from RSSI, and is multi-Pi-ready: one Pi gives honest distance rings, two or more give real trilateration.
+Neighborhood Rhythm listens to the radio neighborhood around your Pi, classifies every device it hears, and draws the "rhythm" of devices coming and going on a live web dashboard. It scans passively (no BLE connections), decodes Apple Continuity and BLE sensor payloads, estimates distance from RSSI, and is multi-Pi-ready: one Pi gives honest distance rings, two or more give real trilateration. Beyond counting devices, it fingerprints them (a stable identity above the rotating MAC layer), flags rogue devices new to your baseline, and sees the WiFi *clients* on your network, not just the APs.
 
 ---
 
@@ -10,7 +10,10 @@ Neighborhood Rhythm listens to the radio neighborhood around your Pi, classifies
 
 - **Passive scanning** — BLE (via `bleak`), WiFi APs (via `iw`), and mDNS (via `zeroconf`). No connections, no probing.
 - **Device classification** — rules-based, by mDNS model/category (highest confidence) > name patterns > service UUIDs > OUI vendor > random-MAC fallback.
-- **Apple Continuity decoding** — AirPods model + battery, AirTag, Find My, iBeacon, Nearby Info. All from manufacturer data, passively.
+- **Device fingerprinting** — derives a stable identity above the rotating MAC layer so one physical device is one row, not many. Cross-radio linking merges the BLE/WiFi/mDNS rows of one device (mDNS hostname serial, OUI+name match); rotation clustering links a phone's rotated MACs by class+signature and time-adjacency. Honest limit: most random-MAC phones can't be linked passively — the empty-signature MACs stay un-merged as honest footfall noise, not fake units.
+- **Rogue-device detection** — flags new stable-MAC devices (registered OUI, seen 2+ scans) that aren't in your known baseline. Filters out rotating-phone noise and drive-bys; a human decides if the new camera, IoT device, or planted hardware belongs.
+- **WiFi client detection** — the scanner sees the WiFi *clients* on your network (phones, laptops, cameras, IoT), not just APs. `scan_lan` reads the Pi's ARP table after a ping sweep — no monitor mode, no extra hardware.
+- **Apple Continuity decoding** — AirPods model + battery, AirTag, Find My, iBeacon, Nearby Info. Nearby auth tag extraction gives a stable per-device ID across MAC rotations; AirPods payloads are length-validated so short mis-typed TLVs no longer emit garbage model codes. All from manufacturer data, passively.
 - **BLE sensor decoding** — BTHome v2, RuuviTag v5, Govee. Decoded payloads stored as JSON in `sightings.extra`.
 - **RSSI → distance** — log-path-loss model with per-class TX power defaults and rolling-median RSSI smoothing (cuts ±50% per-sample noise).
 - **Multi-sensor trilateration** — 1 sensor = honest ring, 2 = ring pair, 3+ = least-squares trilaterated point (via `numpy`).
@@ -24,7 +27,10 @@ Neighborhood Rhythm listens to the radio neighborhood around your Pi, classifies
 
 ```
 collector.py (oneshot, systemd timer, every 5 min)
-   │  BLE + WiFi + mDNS scan
+   │  BLE + WiFi APs + WiFi clients (ARP) + mDNS scan
+   │  → classify → enrich → store
+   │  → fingerprint_all (cross-radio + rotation linking)
+   │  → detect_rogues (new stable-MAC devices vs baseline)
    ▼
 SQLite (WAL, hourly rollup, 14-day raw retention)
    │
@@ -35,7 +41,7 @@ Flask / gunicorn web server (port 8000)
 Dashboard (vanilla JS, Chart.js bundled locally, no CDN)
 ```
 
-The collector runs as a `oneshot` systemd service on a 5-minute timer, independent of the web process. It scans, classifies, enriches, and writes to SQLite. The web server reads from the same DB and pushes new sightings to the dashboard over SSE.
+The collector runs as a `oneshot` systemd service on a 5-minute timer, independent of the web process. It scans, classifies, enriches, and writes to SQLite, then recomputes device fingerprints and runs rogue detection over the result. The web server reads from the same DB and pushes new sightings to the dashboard over SSE.
 
 **Multi-Pi path:** one Pi reports honest radial distance rings (it knows *how far*, not *where*). Add a second Pi and you get a ring pair. Add a third and the least-squares solver in `position.py` produces a trilaterated point. Peers sync sightings via `POST /api/sighting` (authenticated with `PEER_TOKEN`).
 
@@ -136,11 +142,29 @@ gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."
 
 Open `http://<pi>.local:8000` in a browser. You get:
 
-- **Stats row** — devices ever seen, active now, WiFi networks, Pi count.
+- **Stats row** — devices ever seen, active now, WiFi networks, Pi count, dedup'd device count (fingerprints merge rotated MACs + cross-radio rows).
 - **Radar** — a canvas radar with log-scale distance bands. Single-sensor devices show as rings (honest about the uncertainty), trilaterated devices show as points.
 - **Device types** — a live breakdown bar beside the radar, color-coded by type.
 - **Device table** — sortable, filterable, with distance, RSSI, and last-seen. Click a row for the per-device history page.
+- **Rogue-device panel** — unresolved alerts for new stable-MAC devices not in your baseline; mark a device known or dismiss it from here.
 - **Live updates** — SSE pushes new sightings as they land; the dashboard refreshes within ~1.5 s.
+
+---
+
+## API
+
+The dashboard reads from a small JSON API. The newer endpoints:
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/fingerprints` | GET | Merged device fingerprints — clusters of >1 MAC linked as one physical device, with link method + confidence per alias. |
+| `/api/rogue` | GET | Unresolved rogue-device alerts (new stable-MAC devices not in baseline). |
+| `/api/rogue/known` | GET | The known-device baseline. |
+| `/api/rogue/known` | POST | Add a MAC to the baseline `{mac, label, note}` (resolves any open rogue event). |
+| `/api/rogue/<mac>/resolve` | POST | Dismiss a rogue alert without adding to known `{note}`. |
+| `/api/stats` | GET | Counts, including the dedup'd fingerprint count. |
+
+The rest: `/api/now`, `/api/rhythm`, `/api/device/<mac>`, `/api/wifi`, `/api/positions`, `/api/sensors`, `/api/sighting` (peer sync, `PEER_TOKEN`-auth), and the `/stream` SSE endpoint.
 
 ---
 
@@ -150,12 +174,14 @@ Open `http://<pi>.local:8000` in a browser. You get:
 neighborhood-rhythm/
 ├── collector.py          # one-shot BLE+WiFi+mDNS scanner (systemd timer, every 5 min)
 ├── enrich.py             # passive payload decoding (Apple Continuity, BLE sensors, mDNS)
-├── apple_continuity.py   # Apple Continuity decoder (AirPods, AirTag, Find My, iBeacon)
+├── apple_continuity.py   # Apple Continuity decoder (AirPods, AirTag, Find My, iBeacon, Nearby)
 ├── sensors.py            # BLE sensor decoder (BTHome, RuuviTag, Govee)
 ├── classify.py           # rules-based device-type classifier
 ├── rules.py              # name / service / OUI classification rules
+├── fingerprint.py        # device fingerprinting — cross-radio + rotation linking
+├── rogue.py              # rogue-device detection — new stable-MAC devices vs baseline
 ├── position.py           # RSSI→distance, ring / ring_pair / trilateration
-├── db.py                 # SQLite schema, WAL, hourly rollup, retention, dedup
+├── db.py                 # SQLite schema, WAL, hourly rollup, retention, dedup, fingerprints, rogue tables
 ├── config.py             # paths, constants, peer token
 ├── app.py                # Flask + gunicorn web server, JSON API, SSE /stream
 ├── oui.py                # OUI vendor lookup (caches oui.txt from IEEE)
