@@ -304,7 +304,7 @@ def fingerprint_all(conn, reclassify_fn=None):
         group.sort(key=lambda s: s["first_seen"])
         # for each linked pair in this group, check if a later MAC matches
         # the learned interval from the pair
-        linked = [m for m in group if len(clusters[m]) > 1]
+        linked = [m for m in group if len(clusters[m["mac"]]) > 1]
         if len(linked) < 2:
             continue
         # observed interval = first linked pair's first_seen gap
