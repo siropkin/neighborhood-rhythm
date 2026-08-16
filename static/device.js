@@ -54,6 +54,7 @@ async function load() {
     const d = data.device;
     const sightings = data.sightings || [];
     const b = data.behavior;
+    const fp = data.fingerprint;
     document.title = (d.my_label || d.last_label || MAC) + ' — Neighborhood Rhythm';
     document.getElementById('d-title').textContent = d.my_label || d.last_label || MAC;
 
@@ -84,12 +85,18 @@ async function load() {
         <h3>behavior</h3>
         <div class="d-grid">
           <div class="d-stat"><b>${behaviorLabel(b.behavior)}</b><label>pattern</label></div>
-          <div class="d-stat"><b>${b.stationarity || '—'}</b><label>stationarity</label></div>
           <div class="d-stat"><b>${b.active_hours}</b><label>active hours/day</label></div>
-          <div class="d-stat"><b>${b.rssi_std != null ? b.rssi_std.toFixed(1) + ' dB' : '—'}</b><label>rssi spread</label></div>
+          ${b.stationarity ? `<div class="d-stat"><b>${b.stationarity}</b><label>stationarity</label></div>` : ''}
+          ${b.rssi_std != null ? `<div class="d-stat"><b>${b.rssi_std.toFixed(1)} dB</b><label>rssi spread</label></div>` : ''}
           ${b.dwell_s != null ? `<div class="d-stat"><b>${Math.round(b.dwell_s/60)} min</b><label>dwell</label></div>` : ''}
         </div>
         <span class="d-hint">${behaviorHint(b)}</span>
+      </div>` : ''}
+
+      ${fp && fp.aliases && fp.aliases.length > 1 ? `<div class="d-section">
+        <h3>device fingerprint</h3>
+        <span class="d-hint">${fp.aliases.length} identifiers linked as one device (cross-radio / rotation):</span>
+        <div class="d-names">${fp.aliases.map(a => `<div class="d-name">${a.mac} <span class="d-hint">· ${a.source} · ${a.link_method}</span></div>`).join('')}</div>
       </div>` : ''}
 
       <div class="d-section">

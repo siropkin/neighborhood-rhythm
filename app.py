@@ -97,10 +97,19 @@ def api_device(mac):
             "SELECT * FROM sightings WHERE mac=? ORDER BY ts", (mac,)
         ).fetchall()
         behavior = classify_behavior(conn, mac) if dev else None
+        # the fingerprint cluster: this device's fingerprint_id + all aliases
+        # (other MACs linked to the same physical device)
+        fp = None
+        if dev and dev["fingerprint_id"]:
+            fp_id = dev["fingerprint_id"]
+            aliases = conn.execute(
+                "SELECT mac, source, link_method FROM device_aliases WHERE fingerprint_id=?",
+                (fp_id,)).fetchall()
+            fp = {"fingerprint_id": fp_id, "aliases": [dict(a) for a in aliases]}
     if not dev:
         return jsonify({"error": "not found"}), 404
     return jsonify({"device": dict(dev), "sightings": [dict(s) for s in sightings],
-                    "behavior": behavior})
+                    "behavior": behavior, "fingerprint": fp})
 
 
 @app.route("/api/wifi")
