@@ -9,6 +9,20 @@ const fmtAgo = ts => {
   if (s < 86400) return Math.floor(s/3600) + 'h ago';
   return Math.floor(s/86400) + 'd ago';
 };
+const BEHAVIOR_LABELS = {
+  'always-on': 'always-on', 'active-cyclic': 'active-cyclic',
+  'intermittent': 'intermittent', 'transient': 'transient',
+  'mobile': 'mobile', 'unknown': '—',
+};
+const behaviorLabel = b => BEHAVIOR_LABELS[b] || b;
+const behaviorHint = b => ({
+  'always-on': 'Seen every scan, all day, tight signal — fixed infrastructure.',
+  'active-cyclic': 'Present 24/7 but sightings spike on a usage cycle (cleaning, playing).',
+  'intermittent': 'On/off gaps — a device with a usage cycle (light, TV).',
+  'transient': 'Short bounded presence — a visitor who came and left.',
+  'mobile': 'Wide signal spread — moving (phone in a pocket, not fixed).',
+  'unknown': 'Not enough sightings to classify yet.',
+}[b.behavior] || '');
 
 function sparkline(canvas, values) {
   const ctx = canvas.getContext('2d');
@@ -39,6 +53,7 @@ async function load() {
     const data = await res.json();
     const d = data.device;
     const sightings = data.sightings || [];
+    const b = data.behavior;
     document.title = (d.my_label || d.last_label || MAC) + ' — Neighborhood Rhythm';
     document.getElementById('d-title').textContent = d.my_label || d.last_label || MAC;
 
@@ -64,6 +79,18 @@ async function load() {
         <div class="d-stat"><b>${fmtAgo(d.first_seen)}</b><label>first seen</label></div>
         <div class="d-stat"><b>${d.is_mine ? '★ mine' : '☆'}</b><label>tagged</label></div>
       </div>
+
+      ${b ? `<div class="d-section">
+        <h3>behavior</h3>
+        <div class="d-grid">
+          <div class="d-stat"><b>${behaviorLabel(b.behavior)}</b><label>pattern</label></div>
+          <div class="d-stat"><b>${b.stationarity || '—'}</b><label>stationarity</label></div>
+          <div class="d-stat"><b>${b.active_hours}</b><label>active hours/day</label></div>
+          <div class="d-stat"><b>${b.rssi_std != null ? b.rssi_std.toFixed(1) + ' dB' : '—'}</b><label>rssi spread</label></div>
+          ${b.dwell_s != null ? `<div class="d-stat"><b>${Math.round(b.dwell_s/60)} min</b><label>dwell</label></div>` : ''}
+        </div>
+        <span class="d-hint">${behaviorHint(b)}</span>
+      </div>` : ''}
 
       <div class="d-section">
         <h3>signal over time</h3>

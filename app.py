@@ -90,14 +90,17 @@ def api_rhythm():
 
 @app.route("/api/device/<mac>")
 def api_device(mac):
+    from behavior import classify_behavior
     with db.get_db() as conn:
         dev = conn.execute("SELECT * FROM devices WHERE mac=?", (mac,)).fetchone()
         sightings = conn.execute(
             "SELECT * FROM sightings WHERE mac=? ORDER BY ts", (mac,)
         ).fetchall()
+        behavior = classify_behavior(conn, mac) if dev else None
     if not dev:
         return jsonify({"error": "not found"}), 404
-    return jsonify({"device": dict(dev), "sightings": [dict(s) for s in sightings]})
+    return jsonify({"device": dict(dev), "sightings": [dict(s) for s in sightings],
+                    "behavior": behavior})
 
 
 @app.route("/api/wifi")
