@@ -241,6 +241,17 @@ def prune_raw(conn, retention_days):
     conn.execute("DELETE FROM sightings WHERE ts < ?", (time.time() - retention_days * 86400,))
 
 
+def prune_transient_devices(conn, max_age_h=2):
+    """Drop drive-by devices: seen once, last seen > max_age_h ago. Their raw
+    sightings stay (the rollup preserves the rhythm); only the devices-table
+    row goes, so 'ever seen' stops counting one-off transients. A device that
+    comes back re-appears (upsert recreates the row)."""
+    cutoff = time.time() - max_age_h * 3600
+    conn.execute(
+        "DELETE FROM devices WHERE sighting_count <= 1 AND last_seen < ?",
+        (cutoff,))
+
+
 def latest_sighting_per_device(conn, cutoff_ts):
     """Latest sighting per device for /api/now — uses the (mac, ts) composite index."""
     return conn.execute(

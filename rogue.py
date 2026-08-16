@@ -21,12 +21,16 @@ import time
 import db
 from rules import is_random_mac
 
-# A device needs this many sightings before it's "consistent" (not a drive-by).
-MIN_SIGHTINGS = 2
+# A device is "consistent" (not a drive-by) if seen this many times AND its
+# sightings span this many seconds. A device seen 3× in one 10-min scan burst
+# then never again is NOT consistent — it's a drive-by that happened to be
+# caught multiple times in one scan. The span requirement filters that out.
+MIN_SIGHTINGS = 3
+MIN_SIGHTING_SPAN_S = 600  # sightings must span >= 10 min (not one burst)
 
 
 def detect_rogues(conn, now=None):
-    """Run after a scan. Find stable-MAC devices seen 2+ times that aren't
+    """Run after a scan. Find stable-MAC devices seen consistently that aren't
     known and haven't been flagged. Insert rogue_events for new ones.
     Returns the list of newly-flagged devices."""
     now = now or time.time()
@@ -34,13 +38,13 @@ def detect_rogues(conn, now=None):
     known = {r["mac"] for r in conn.execute("SELECT mac FROM known_devices")}
     flagged = {r["mac"] for r in conn.execute(
         "SELECT mac FROM rogue_events WHERE resolved=0")}
-    # stable-MAC devices seen 2+ times, not mDNS pseudo-keys (those are
-    # services, not devices-on-the-network)
+    # stable-MAC devices seen MIN_SIGHTINGS+ times, sightings spanning
+    # MIN_SIGHTING_SPAN_S+ (not a single-scan burst), not mDNS pseudo-keys.
     rows = conn.execute(
-        """SELECT mac, oui_name, last_type, last_label, first_seen, sighting_count
+        """SELECT mac, oui_name, last_type, last_label, first_seen, last_seen, sighting_count
            FROM devices
-           WHERE sighting_count >= ? AND mac NOT LIKE 'mdns:%'""",
-        (MIN_SIGHTINGS,)).fetchall()
+           WHERE sighting_count >= ? AND (last_seen - first_seen) >= ? AND mac NOT LIKE 'mdns:%'""",
+        (MIN_SIGHTINGS, MIN_SIGHTING_SPAN_S)).fetchall()
     new = []
     for r in rows:
         mac = r["mac"]

@@ -299,6 +299,7 @@ def main():
                 n_ap += 1
         db.rollup_recent(conn, hours_back=2)
         db.prune_raw(conn, RETENTION_DAYS)
+        db.prune_transient_devices(conn)  # drop single-sighting drive-bys
         # recompute device fingerprints (cross-radio + rotation linking).
         # cheap on ~1k devices; idempotent.
         from fingerprint import fingerprint_all
