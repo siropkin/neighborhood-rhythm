@@ -161,16 +161,16 @@ def api_copresence():
     from fingerprint import detect_copresence
     with db.get_db() as conn:
         pairs = detect_copresence(conn)
-    # enrich with device labels
-    out = []
-    for a, b, overlap, ac, bc, ratio in pairs[:30]:
-        da = conn.execute("SELECT oui_name, last_type, last_label FROM devices WHERE mac=?", (a,)).fetchone()
-        db_row = conn.execute("SELECT oui_name, last_type, last_label FROM devices WHERE mac=?", (b,)).fetchone()
-        out.append({"a": a, "b": b, "ratio": ratio, "co_scans": overlap,
-                    "a_label": (da["last_label"] or da["oui_name"] or a) if da else a,
-                    "b_label": (db_row["last_label"] or db_row["oui_name"] or b) if db_row else b,
-                    "a_type": da["last_type"] if da else None,
-                    "b_type": db_row["last_type"] if db_row else None})
+        # enrich with device labels (must be inside the with — conn closes after)
+        out = []
+        for a, b, overlap, ac, bc, ratio in pairs[:30]:
+            da = conn.execute("SELECT oui_name, last_type, last_label FROM devices WHERE mac=?", (a,)).fetchone()
+            db_row = conn.execute("SELECT oui_name, last_type, last_label FROM devices WHERE mac=?", (b,)).fetchone()
+            out.append({"a": a, "b": b, "ratio": ratio, "co_scans": overlap,
+                        "a_label": (da["last_label"] or da["oui_name"] or a) if da else a,
+                        "b_label": (db_row["last_label"] or db_row["oui_name"] or b) if db_row else b,
+                        "a_type": da["last_type"] if da else None,
+                        "b_type": db_row["last_type"] if db_row else None})
     return jsonify({"pairs": out})
 
 
