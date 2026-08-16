@@ -26,13 +26,19 @@ from rules import is_random_mac
 # then never again is NOT consistent — it's a drive-by that happened to be
 # caught multiple times in one scan. The span requirement filters that out.
 MIN_SIGHTINGS = 3
-MIN_SIGHTING_SPAN_S = 600  # sightings must span >= 10 min (not one burst)
+MIN_SIGHTING_SPAN_S = 900  # sightings must span >= 15 min (genuinely staying)
 
 
 def detect_rogues(conn, now=None):
     """Run after a scan. Find stable-MAC devices seen consistently that aren't
     known and haven't been flagged. Insert rogue_events for new ones.
-    Returns the list of newly-flagged devices."""
+    Returns the list of newly-flagged devices.
+
+    A rogue must be IDENTIFIABLE — has an OUI vendor or a known device class
+    (not 'unknown'). An unidentifiable stable MAC is radio noise, not an
+    actionable alert (781/820 prior rogues were unidentifiable 'unknown').
+    The point is "a new device you can act on", not "a new MAC you can't name".
+    """
     now = now or time.time()
     # known MACs (the baseline) + already-flagged MACs (don't re-alert)
     known = {r["mac"] for r in conn.execute("SELECT mac FROM known_devices")}
@@ -52,9 +58,10 @@ def detect_rogues(conn, now=None):
             continue
         if is_random_mac(mac):
             continue  # rotating phone — noise, not a rogue device
-        # a stable MAC with an OUI (registered vendor) is a real device.
-        # A stable MAC with no OUI is still worth flagging (could be a
-        # device with an unregistered OUI) — don't over-filter.
+        # Identifiability gate: must have an OUI vendor OR a known device
+        # class (not 'unknown'). A stable MAC we can't name isn't actionable.
+        if not r["oui_name"] and r["last_type"] in (None, "unknown"):
+            continue
         conn.execute(
             """INSERT INTO rogue_events
                (mac, first_seen, ts, oui_name, device_class, label, source)
