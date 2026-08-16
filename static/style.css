@@ -222,8 +222,10 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .rogue-panel h2 { color: #f85149; }
 .rogue-count { background: #da3633; color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; font-variant-numeric: tabular-nums; }
 .rogue-hint { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
-.rogue-panel table th { text-transform: uppercase; font-size: 10px; color: var(--muted); letter-spacing: .04em; }
-.rogue-panel td { padding: 8px 10px; }
+/* rogue table inherits the global table/th/td rules; only override what differs:
+   non-sortable headers (no cursor), and right-align the first-seen column. */
+.rogue-panel th { cursor: default; }
+.rogue-panel th.num, .rogue-panel td.num { text-align: right; }
 .rogue-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .rogue-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .rogue-btn:hover { border-color: var(--accent); }
