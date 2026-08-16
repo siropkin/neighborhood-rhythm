@@ -260,24 +260,71 @@ def fingerprint_all(conn, reclassify_fn=None):
         if not svc_set and not apple:
             continue
         by_sig[(s["type"], _device_signature(s["services"], None))].append(s)
+    # Temporal-confidence boost: a rotation handoff is A gone → B appears
+    # within a short window, AND A not seen again after B (clean handoff, no
+    # overlap). This is the "visible 15 min, gone, new appears" pattern — it
+    # lets us link pairs where the signature alone is weak, because the
+    # temporal handoff is itself a device-identifying signal.
+    HANDOFF_MAX_GAP_S = 120   # A gone → B appears within 2 min = a handoff
+    HANDOFF_OVERLAP_S = 30    # A seen up to 30s after B = scan jitter, not overlap
     for key, group in by_sig.items():
         if len(group) < 2:
             continue
         # Cardinality guard: if too many MACs share this signature, it's a
         # class signature (e.g. 0000fcf1 = Google Nearby, 20 simultaneous MACs),
         # not a device-unique one. Linking them chains unrelated phones.
-        # Skip groups large enough to be a population, not a rotation.
         if len(group) > 4:
             continue
         group.sort(key=lambda s: s["first_seen"])
-        # Pairwise only — no transitive chaining. A→B is a rotation claim;
-        # chaining A→B→C→D assumes one phone kept rotating, but with a coarse
-        # signature it's more likely several. Link direct pairs, cap at 2.
         for i in range(1, len(group)):
             prev, cur = group[i-1], group[i]
             gap = cur["first_seen"] - prev["last_seen"]
-            if 0 < gap <= ROTATION_WINDOW_S:
+            if gap <= 0:
+                continue  # B appeared before/while A was still around — overlap, not a handoff
+            # Link if A is gone before B (no overlap beyond scan jitter) and
+            # the handoff is within the rotation window. A clean handoff
+            # (gap <= 2 min) is a strong rotation signal; a longer gap within
+            # the window is a weaker but still valid link.
+            a_gone_before_b = prev["last_seen"] <= cur["first_seen"] + HANDOFF_OVERLAP_S
+            if a_gone_before_b and gap <= ROTATION_WINDOW_S:
                 _merge(prev["mac"], cur["mac"])
+
+    # ---- Pass C2: rotation-interval extension ----
+    # Once a cluster has 2+ linked MACs (A→B), we've observed one rotation
+    # interval (B.first_seen - A.first_seen ≈ the phone's rotation period).
+    # A 3rd MAC C appearing at the expected interval (±2 min) with the same
+    # signature and a clean handoff from the last MAC links with higher
+    # confidence — the periodicity is itself a device-identifying signal.
+    # This catches the D in A→B→C→D that a single-pair check might miss.
+    for key, group in by_sig.items():
+        if len(group) < 3:
+            continue
+        if len(group) > 4:
+            continue  # same cardinality cap
+        group.sort(key=lambda s: s["first_seen"])
+        # for each linked pair in this group, check if a later MAC matches
+        # the learned interval from the pair
+        linked = [m for m in group if len(clusters[m]) > 1]
+        if len(linked) < 2:
+            continue
+        # observed interval = first linked pair's first_seen gap
+        interval = linked[1]["first_seen"] - linked[0]["first_seen"]
+        if interval <= 0:
+            continue
+        last_linked = linked[-1]
+        for cand in group:
+            if cand["mac"] in clusters[last_linked["mac"]]:
+                continue  # already linked
+            since = cand["first_seen"] - last_linked["last_seen"]
+            if since <= 0:
+                continue
+            # candidate appears ~one interval after the last linked MAC,
+            # with a clean handoff. The interval match + signature + handoff
+            # = high confidence this is the next rotation.
+            if (abs((cand["first_seen"] - last_linked["first_seen"]) - interval) <= 120
+                    and since <= ROTATION_WINDOW_S
+                    and last_linked["last_seen"] <= cand["first_seen"] + HANDOFF_OVERLAP_S):
+                _merge(last_linked["mac"], cand["mac"])
 
     # ---- Write clusters to the tables ----
     seen_clusters = set()
