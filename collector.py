@@ -303,6 +303,11 @@ def main():
         # cheap on ~1k devices; idempotent.
         from fingerprint import fingerprint_all
         fingerprint_all(conn)
+        # rogue-device detection: flag new stable-MAC devices not in baseline.
+        from rogue import detect_rogues
+        rogues = detect_rogues(conn)
+        if rogues:
+            print(f"  {len(rogues)} new rogue device(s)")
     _fix_db_perms()
     print(f"scanned {n_dev} devices, {n_ap} APs, stored (sensor={SENSOR_ID})")
 

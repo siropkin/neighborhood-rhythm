@@ -241,6 +241,46 @@ def api_fingerprints():
     return jsonify({"fingerprints": out})
 
 
+@app.route("/api/rogue")
+def api_rogue():
+    """Unresolved rogue-device alerts — new stable-MAC devices not in the
+    known baseline."""
+    with db.get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM rogue_events WHERE resolved=0 ORDER BY ts DESC"
+        ).fetchall()
+    return jsonify({"rogues": [dict(r) for r in rows]})
+
+
+@app.route("/api/rogue/known", methods=["GET", "POST"])
+def api_known():
+    """GET: the known-device baseline. POST {mac, label, note}: add to it
+    (resolves any open rogue event for that MAC)."""
+    if request.method == "POST":
+        body = request.get_json(force=True, silent=True) or {}
+        mac = body.get("mac")
+        if not mac:
+            return jsonify({"error": "mac required"}), 400
+        from rogue import mark_known
+        with db.get_db() as conn:
+            mark_known(conn, mac, body.get("label"), body.get("note"))
+        return jsonify({"ok": True})
+    with db.get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM known_devices ORDER BY added_ts DESC").fetchall()
+    return jsonify({"known": [dict(r) for r in rows]})
+
+
+@app.route("/api/rogue/<mac>/resolve", methods=["POST"])
+def api_resolve_rogue(mac):
+    """Dismiss a rogue alert (one-off visitor) without adding to known."""
+    body = request.get_json(force=True, silent=True) or {}
+    from rogue import resolve_rogue
+    with db.get_db() as conn:
+        resolve_rogue(conn, mac, body.get("note"))
+    return jsonify({"ok": True})
+
+
 @app.route("/api/stats")
 def api_stats():
     now = time.time()

@@ -96,6 +96,31 @@ CREATE TABLE IF NOT EXISTS device_aliases (
     FOREIGN KEY (fingerprint_id) REFERENCES device_fingerprints(fingerprint_id)
 );
 CREATE INDEX IF NOT EXISTS idx_aliases_fp ON device_aliases(fingerprint_id);
+
+-- Rogue-device detection: a device is "rogue" if it's a stable MAC (not a
+-- rotating phone), seen consistently (2+ scans), and not in the known list.
+-- known_devices: the baseline the user maintains (their own devices).
+-- rogue_events: one row per new stable device that wasn't known.
+CREATE TABLE IF NOT EXISTS known_devices (
+    mac TEXT PRIMARY KEY,
+    label TEXT,
+    added_ts REAL,
+    note TEXT
+);
+CREATE TABLE IF NOT EXISTS rogue_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mac TEXT NOT NULL,
+    first_seen REAL NOT NULL,
+    ts REAL NOT NULL,           -- when we flagged it
+    oui_name TEXT,
+    device_class TEXT,
+    label TEXT,
+    source TEXT,
+    resolved INTEGER DEFAULT 0, -- 1 once the user marks it known/dismissed
+    note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rogue_mac ON rogue_events(mac);
+CREATE INDEX IF NOT EXISTS idx_rogue_unresolved ON rogue_events(resolved);
 """
 
 
