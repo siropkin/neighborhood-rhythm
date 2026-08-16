@@ -231,3 +231,5 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .rogue-btn:hover { border-color: var(--accent); }
 .rogue-btn.known:hover { border-color: #2ea043; color: #2ea043; }
 .rogue-btn.dismiss:hover { border-color: #f85149; color: #f85149; }
+.rogue-name { cursor: pointer; }
+.rogue-name:hover b { color: var(--accent); }

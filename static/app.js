@@ -231,7 +231,7 @@ function renderRogue(rogues) {
   count.textContent = rogues.length;
   tb.innerHTML = rogues.map(r => `
     <tr>
-      <td class="dev-name"><b>${r.label || r.mac}</b> <span class="mono dev-mac">${r.mac}</span></td>
+      <td class="dev-name rogue-name" data-mac="${r.mac}"><b>${r.label || r.mac}</b> <span class="mono dev-mac">${r.mac}</span></td>
       <td>${r.oui_name || '—'}</td>
       <td><span class="type-chip">${typeLabel(r.device_class || '?')}</span></td>
       <td class="num">${fmtAgo(r.first_seen)}</td>
@@ -240,6 +240,9 @@ function renderRogue(rogues) {
         <button class="rogue-btn dismiss" data-mac="${r.mac}">dismiss</button>
       </td>
     </tr>`).join('');
+  // click the device name → device details page (like the main table)
+  tb.querySelectorAll('td.rogue-name').forEach(td =>
+    td.onclick = () => { location.href = '/device/' + encodeURIComponent(td.dataset.mac); });
   tb.querySelectorAll('button.known').forEach(b => b.onclick = () =>
     rogueAction(b.dataset.mac, '/api/rogue/known', {mac: b.dataset.mac}));
   tb.querySelectorAll('button.dismiss').forEach(b => b.onclick = () =>
