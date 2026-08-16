@@ -2,7 +2,9 @@
 
 **A passive BLE / WiFi / mDNS environment scanner with a live radar dashboard, built for a Raspberry Pi.**
 
-Neighborhood Rhythm listens to the radio neighborhood around your Pi, classifies every device it hears, and draws the "rhythm" of devices coming and going on a live web dashboard. It scans passively (no BLE connections), decodes Apple Continuity and BLE sensor payloads, estimates distance from RSSI, and is multi-Pi-ready: one Pi gives honest distance rings, two or more give real trilateration. Beyond counting devices, it fingerprints them (a stable identity above the rotating MAC layer), flags rogue devices new to your baseline, and sees the WiFi *clients* on your network, not just the APs.
+Neighborhood Rhythm listens to the radio neighborhood around your Pi, classifies the devices it hears, and draws the "rhythm" of devices coming and going on a live web dashboard. It scans passively (no BLE connections), decodes Apple Continuity and BLE sensor payloads, estimates distance from RSSI, and is multi-Pi-ready: one Pi gives honest distance rings, two or more give real trilateration. Beyond counting devices, it fingerprints them (a stable identity above the rotating MAC layer) and flags devices new to your baseline.
+
+> **What this is, honestly:** a hobbyist passive scanner that inventories devices actively advertising BLE/WiFi/mDNS near the Pi and flags what's new since your last sweep. It is **not** a "find every transmitting device in this space" tool — a passive scanner can't see devices that are asleep, off-cycle during the ~10 s scan window, on radios the Pi doesn't have (cellular, Zigbee, Z-Wave, sub-GHz, UWB), or that rotate their MAC (most modern phones). Coverage of actively-advertising BLE/WiFi devices is roughly 30–40% of the transmitters in a room, and shrinking as MAC randomization spreads. See [Honest limits](#honest-limits) below.
 
 ---
 
@@ -11,8 +13,8 @@ Neighborhood Rhythm listens to the radio neighborhood around your Pi, classifies
 - **Passive scanning** — BLE (via `bleak`), WiFi APs (via `iw`), and mDNS (via `zeroconf`). No connections, no probing.
 - **Device classification** — rules-based, by mDNS model/category (highest confidence) > name patterns > service UUIDs > OUI vendor > random-MAC fallback.
 - **Device fingerprinting** — derives a stable identity above the rotating MAC layer so one physical device is one row, not many. Cross-radio linking merges the BLE/WiFi/mDNS rows of one device (mDNS hostname serial, OUI+name match); rotation clustering links a phone's rotated MACs by class+signature and time-adjacency. Honest limit: most random-MAC phones can't be linked passively — the empty-signature MACs stay un-merged as honest footfall noise, not fake units.
-- **Rogue-device detection** — flags new stable-MAC devices (registered OUI, seen 2+ scans) that aren't in your known baseline. Filters out rotating-phone noise and drive-bys; a human decides if the new camera, IoT device, or planted hardware belongs.
-- **WiFi client detection** — the scanner sees the WiFi *clients* on your network (phones, laptops, cameras, IoT), not just APs. `scan_lan` reads the Pi's ARP table after a ping sweep — no monitor mode, no extra hardware.
+- **Rogue-device detection** — flags new stable-MAC devices (registered OUI, seen 3+ times over ≥10 min) that aren't in your known baseline. Filters out rotating-phone noise and drive-bys; a human decides if the new camera, IoT device, or planted hardware belongs. **What it misses by design:** any device that rotates its MAC (most phones, any modern planted device that randomizes), anything advertising for under ~10 min, and anything asleep or off-cycle during the scan window. It's an inventory diff, not a threat detector.
+- **LAN client detection** — `scan_lan` reads the Pi's ARP table after a ping sweep, so it sees devices on the Pi's own subnet that answer ping or have talked recently — not all WiFi clients, and nothing off-network. No monitor mode, no extra hardware.
 - **Apple Continuity decoding** — AirPods model + battery, AirTag, Find My, iBeacon, Nearby Info. Nearby auth tag extraction gives a stable per-device ID across MAC rotations; AirPods payloads are length-validated so short mis-typed TLVs no longer emit garbage model codes. All from manufacturer data, passively.
 - **BLE sensor decoding** — BTHome v2, RuuviTag v5, Govee. Decoded payloads stored as JSON in `sightings.extra`.
 - **RSSI → distance** — log-path-loss model with per-class TX power defaults and rolling-median RSSI smoothing (cuts ±50% per-sample noise).
@@ -205,6 +207,18 @@ neighborhood-rhythm/
 ```
 
 ---
+
+## Honest limits
+
+This is a passive hobbyist scanner, not a security product. Read these before trusting any output:
+
+- **It's not "find every transmitting device."** A passive BLE/WiFi/mDNS scanner sees only devices actively advertising during its ~10 s scan window (a ~3% duty cycle at a 5-min interval). Anything asleep, off-cycle, or on a radio the Pi lacks (cellular, Zigbee, Z-Wave, sub-GHz, UWB, classic-BT-when-connected) is invisible.
+- **MAC randomization breaks tracking.** Most modern phones rotate their BLE MAC every ~15 min and can't be linked passively. ~80% of devices (speakers, TVs, lights, beacons) have stable MACs and track fine; the empty-signature rotating MACs stay un-mergeable footfall noise.
+- **Rogue detection is an inventory diff, not a threat classifier.** It flags new stable-MAC devices seen 3+ times over ≥10 min. A device that randomizes its MAC, advertises briefly, or sleeps during the sweep is missed by design. "Something new is here" — a human decides if it belongs.
+- **Distance is rough.** RSSI→distance is ±50% even with TX power + smoothing. The radar shows rings (honest about the uncertainty), not points. Don't over-trust the meter number.
+- **No probe-request capture yet.** Phones not on your network are invisible until a USB monitor-mode adapter is added (planned, not built).
+
+If you need guaranteed device discovery, use active scanning / network-level tools (Nmap, a WIPS, an agent-based EDR), not this.
 
 ## License
 

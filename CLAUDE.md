@@ -9,10 +9,17 @@ dashboard. The Pi scans its surroundings every 5 min, classifies devices,
 fingerprints them across MAC rotations and radios, flags rogue (unknown stable)
 devices, stores history in SQLite, and shows a "Neighborhood Rhythm" dashboard.
 Designed to be device-agnostic (works anywhere it boots) and multi-Pi-ready
-(1 Pi = honest radial distance rings; 2+ Pis = real trilateration). The product
-direction is an IoT device-inventory + rogue-device-detection security tool —
-"find every transmitting device in this space" — positioned to complement
-Verkada (cameras/access, but NOT device detection).
+(1 Pi = honest radial distance rings; 2+ Pis = real trilateration).
+
+**Honest scope:** this is a hobbyist passive scanner that inventories devices
+actively advertising BLE/WiFi/mDNS near the Pi and flags what's new since the
+last sweep. It is NOT a "find every transmitting device in this space" tool —
+passive scanning can't see devices that are asleep, off-cycle during the ~10 s
+scan window, on radios the Pi lacks (cellular/Zigbee/Z-Wave/sub-GHz/UWB), or
+that rotate their MAC (most modern phones). Coverage of actively-advertising
+BLE/WiFi devices is roughly 30–40% of transmitters in a room, shrinking as MAC
+randomization spreads. Rogue detection is an inventory diff, not a threat
+classifier. See README "Honest limits".
 
 ## Architecture
 - `collector.py` — one-shot scanner (BLE via bleak + classic BT via hcitool +
@@ -35,9 +42,11 @@ Verkada (cameras/access, but NOT device detection).
   Writes `device_fingerprints` + `device_aliases` tables. Idempotent; run after
   every scan.
 - `rogue.py` — **rogue-device detection**: flags new stable-MAC devices (not
-  random/rotating phones) seen 2+ times that aren't in the `known_devices`
-  baseline. Inventory + diff, not a threat classifier — "something new is here",
-  a human decides if it belongs.
+  random/rotating phones) seen 3+ times over ≥10 min (`MIN_SIGHTINGS=3`,
+  `MIN_SIGHTING_SPAN_S=600`) that aren't in the `known_devices` baseline.
+  Inventory + diff, not a threat classifier — "something new is here", a human
+  decides if it belongs. Misses by design: randomizing MACs, brief advertisers,
+  asleep/off-cycle devices.
 - `classify.py` + `rules.py` — device-type brain. Rules-based: mDNS model/category
   (highest conf) > name patterns > service UUIDs > OUI > random-MAC fallback.
 - `db.py` — SQLite schema + helpers. Tables: `devices`, `sightings`,
@@ -133,15 +142,15 @@ Service-UUID sets are a **CLASS signal, not a UNIT signal**: 456/508 random MACs
 share an empty set. So MAC-rotation clustering (Pass C) needs guards or it
 over-merges: skip empty signatures, cap group cardinality (>4 = a population not
 a rotation), pairwise links only (no transitive chaining A→B→C→D). The empty-set
-phones stay un-merged — honest footfall noise, not linkable units. See
-`docs/FINGERPRINTING.md` (design) + `docs/FINGERPRINTING-VALIDATION.md`.
+phones stay un-merged — honest footfall noise, not linkable units.
 
 ## Rogue detection — the honest limits
 Counts devices, not people. MAC randomization means ~340 empty-set phones are
 un-mergeable noise. RSSI ±50% is the physics floor. Rogue detection filters to
-stable MACs (registered OUI, not locally-administered) seen 2+ times — excludes
-rotating-phone noise, catches a new camera/IoT device/planted hardware that
-keeps its MAC.
+stable MACs (registered OUI, not locally-administered) seen 3+ times over ≥10
+min — excludes rotating-phone noise and brief drive-bys, catches a new
+camera/IoT device that keeps its MAC and advertises persistently. Misses any
+device that randomizes, advertises briefly, or sleeps during the sweep.
 
 ## Repo
 - GitHub: `siropkin/neighborhood-rhythm` (public — no secrets; DB/tokens/OUI cache gitignored)
