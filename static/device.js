@@ -118,6 +118,7 @@ async function load() {
 
       <button class="btn${d.is_mine ? ' mine' : ''}" id="d-tag">${d.is_mine ? '★ tagged mine — untag' : 'tag as mine'}</button>
       <input id="d-tag-label" class="d-tag-input" placeholder="label (optional)" value="${d.my_label || ''}">
+      <button class="btn${d.tracked ? ' tracked' : ''}" id="d-track">${d.tracked ? '◉ tracking — stop' : '◉ track this device'}</button>
     `;
 
     if (rssiSeries.length >= 2) sparkline(document.getElementById('signal-spark'), rssiSeries);
@@ -128,6 +129,14 @@ async function load() {
       await fetch('/api/device/' + encodeURIComponent(MAC) + '/tag', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ is_mine: mine, my_label: label }),
+      });
+      load();
+    };
+    document.getElementById('d-track').onclick = async () => {
+      const tracked = !d.tracked;
+      await fetch('/api/device/' + encodeURIComponent(MAC) + '/track', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ tracked: tracked ? 1 : 0 }),
       });
       load();
     };

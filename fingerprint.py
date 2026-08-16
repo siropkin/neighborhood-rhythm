@@ -367,6 +367,49 @@ def fingerprint_all(conn, reclassify_fn=None):
     return n_fps
 
 
+def detect_copresence(conn, min_scans=10, min_ratio=0.8):
+    """Find pairs of stable devices that are almost always seen together —
+    likely one physical unit (two radios, or two chips in one device), or
+    just devices that live in the same room. Returns (mac_a, mac_b, co_count,
+    a_count, b_count, ratio) pairs, ratio >= min_ratio, both seen in >=
+    min_scans sightings. min_scans=10 filters short co-occurrences (a device
+    seen 5x could co-occur by chance). A suggestion, not an auto-merge — the
+    radio can't prove two co-located chips are one device."""
+    # stable devices (not random MACs), seen enough times
+    devs = conn.execute(
+        "SELECT mac FROM devices WHERE sighting_count >= ? AND mac NOT LIKE 'mdns:%'",
+        (min_scans,)).fetchall()
+    stable = [d["mac"] for d in devs if not is_random_mac(d["mac"])]
+    if len(stable) < 2:
+        return []
+    # for each device, the set of scan-timestamps (rounded to the minute) it
+    # was seen in. Co-presence = two devices sharing most of their minutes.
+    minutes = {}
+    for mac in stable:
+        rows = conn.execute(
+            "SELECT DISTINCT CAST(ts/60 AS INTEGER) m FROM sightings WHERE mac=?",
+            (mac,)).fetchall()
+        minutes[mac] = {r["m"] for r in rows}
+    pairs = []
+    for i, a in enumerate(stable):
+        ma = minutes[a]
+        if len(ma) < min_scans:
+            continue
+        for b in stable[i+1:]:
+            mb = minutes[b]
+            if len(mb) < min_scans:
+                continue
+            overlap = len(ma & mb)
+            union = len(ma | mb)
+            if union == 0:
+                continue
+            ratio = overlap / union
+            if ratio >= min_ratio:
+                pairs.append((a, b, overlap, len(ma), len(mb), round(ratio, 2)))
+    pairs.sort(key=lambda p: -p[5])
+    return pairs
+
+
 if __name__ == "__main__":
     # Self-check: run fingerprinting over the live DB, report the dedup.
     with db.get_db() as conn:

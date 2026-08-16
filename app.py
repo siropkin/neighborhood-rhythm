@@ -118,6 +118,62 @@ def api_tag(mac):
     return jsonify({"ok": True})
 
 
+@app.route("/api/device/<mac>/track", methods=["POST"])
+def api_track(mac):
+    """Toggle tracking on a device. Body {tracked: 0/1, note: str}.
+    A tracked device gets a timeline + state-change alerts."""
+    body = request.get_json(force=True, silent=True) or {}
+    tracked = 1 if body.get("tracked") else 0
+    note = body.get("note")
+    with db.get_db() as conn:
+        if note is not None:
+            conn.execute("UPDATE devices SET tracked=?, watch_note=? WHERE mac=?",
+                         (tracked, note, mac))
+        else:
+            conn.execute("UPDATE devices SET tracked=? WHERE mac=?", (tracked, mac))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tracked")
+def api_tracked():
+    """Tracked devices + their sighting timeline (presence over time)."""
+    with db.get_db() as conn:
+        devs = conn.execute(
+            "SELECT mac, oui_name, last_type, last_label, watch_note, "
+            "first_seen, last_seen, sighting_count FROM devices WHERE tracked=1"
+        ).fetchall()
+        out = []
+        for d in devs:
+            # presence timeline: sightings bucketed to the scan (5-min) level,
+            # last 24h, so you can see when it's present vs absent.
+            rows = conn.execute(
+                "SELECT ts, rssi FROM sightings WHERE mac=? AND ts >= ? ORDER BY ts",
+                (d["mac"], time.time() - 86400)).fetchall()
+            timeline = [{"ts": r["ts"], "rssi": r["rssi"]} for r in rows]
+            out.append({**dict(d), "timeline": timeline})
+    return jsonify({"tracked": out})
+
+
+@app.route("/api/copresence")
+def api_copresence():
+    """Pairs of devices almost always seen together — likely one physical
+    unit. A suggestion to merge, not an auto-merge."""
+    from fingerprint import detect_copresence
+    with db.get_db() as conn:
+        pairs = detect_copresence(conn)
+    # enrich with device labels
+    out = []
+    for a, b, overlap, ac, bc, ratio in pairs[:30]:
+        da = conn.execute("SELECT oui_name, last_type, last_label FROM devices WHERE mac=?", (a,)).fetchone()
+        db_row = conn.execute("SELECT oui_name, last_type, last_label FROM devices WHERE mac=?", (b,)).fetchone()
+        out.append({"a": a, "b": b, "ratio": ratio, "co_scans": overlap,
+                    "a_label": (da["last_label"] or da["oui_name"] or a) if da else a,
+                    "b_label": (db_row["last_label"] or db_row["oui_name"] or b) if db_row else b,
+                    "a_type": da["last_type"] if da else None,
+                    "b_type": db_row["last_type"] if db_row else None})
+    return jsonify({"pairs": out})
+
+
 @app.route("/api/positions")
 def api_positions():
     now = time.time()

@@ -152,6 +152,10 @@ def init_db():
         dcols = {r[1] for r in conn.execute("PRAGMA table_info(devices)")}
         if "fingerprint_id" not in dcols:
             conn.execute("ALTER TABLE devices ADD COLUMN fingerprint_id TEXT")
+        if "tracked" not in dcols:
+            conn.execute("ALTER TABLE devices ADD COLUMN tracked INTEGER DEFAULT 0")
+        if "watch_note" not in dcols:
+            conn.execute("ALTER TABLE devices ADD COLUMN watch_note TEXT")
 
 
 def upsert_device(conn, mac, oui_name, ts, dev_type, label):

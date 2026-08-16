@@ -233,3 +233,5 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .rogue-btn.dismiss:hover { border-color: #f85149; color: #f85149; }
 .rogue-name { cursor: pointer; }
 .rogue-name:hover b { color: var(--accent); }
+.btn.tracked { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+#d-track { margin-left: 8px; width: auto; }
