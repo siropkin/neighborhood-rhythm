@@ -300,9 +300,12 @@ def api_stats():
         n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors").fetchone()["c"]
         # dedup'd device count (fingerprints merge rotated MACs + cross-radio)
         n_fp = conn.execute("SELECT COUNT(*) c FROM device_fingerprints").fetchone()["c"]
+        # "real" devices: seen 3+ times (not a drive-by). The headline total
+        # counts every MAC ever seen; this is the stable-device count.
+        real = conn.execute("SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3").fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
     return jsonify({
-        "current": current, "total": total,
+        "current": current, "total": total, "real": real,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
         "last_scan": last,
     })

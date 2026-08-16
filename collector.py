@@ -9,7 +9,7 @@ import time
 import db
 import oui
 from classify import classify
-from config import SENSOR_ID, RETENTION_DAYS
+from config import SENSOR_ID, RETENTION_DAYS, BLE_RSSI_FLOOR
 from position import _distance_from_rssi
 from rules import is_random_mac, HAP_CATEGORY
 from enrich import enrich
@@ -50,6 +50,12 @@ def scan_ble(timeout=10):
         # Outer wait_for is a hard ceiling in case BlueZ/dbus stalls.
         devs = asyncio.run(asyncio.wait_for(_scan(), timeout=timeout + 5))
         for addr, (dev, adv) in devs.items():
+            # Ignore very weak ads: below BLE_RSSI_FLOOR is a drive-by outside
+            # the building, not a device in it. -85 dBm is the seam between
+            # real devices (median -80) and drive-bys (median -89). Calibrate
+            # per-environment — move the Pi, re-check the histogram.
+            if adv.rssi is not None and adv.rssi < BLE_RSSI_FLOOR:
+                continue
             name = dev.name or getattr(adv, "local_name", "") or ""
             services = [str(u) for u in (adv.service_uuids or [])]
             out.append({

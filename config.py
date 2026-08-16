@@ -17,6 +17,7 @@ REF_RSSI_1M = -59
 RETENTION_DAYS = 14   # raw sightings pruned after this; hourly rollup kept forever
 DEDUP_WINDOW_S = 2    # same mac+sensor within this window = one sighting (bleak double-callback guard)
 ACTIVE_WINDOW_S = 600  # "active now" = seen within this many seconds (10 min)
+BLE_RSSI_FLOOR = -85  # ignore BLE ads weaker than this (drive-by, outside the building)
 
 try:
     from config_local import *  # noqa: F401,F403
