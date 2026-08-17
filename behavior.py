@@ -59,11 +59,13 @@ def classify_behavior(conn, mac, now=None):
     rate_med = statistics.median(rates) if rates else 0
     rate_max = max(rates) if rates else 0
 
-    # stationarity: low RSSI std = fixed; high = mobile
-    if rssi_std is not None:
+    # stationarity: low RSSI std = fixed; high = mobile. No RSSI data
+    # (mDNS devices) → None, not "fixed" — there's no signal to measure.
+    if rssi_vals:
         stationarity = "fixed" if rssi_std < MOBILE_RSSI_STD else "mobile"
     else:
         stationarity = None
+        rssi_std = None
 
     # dwell: for transient devices, the span from first to last sighting
     span_s = rows[-1]["ts"] - rows[0]["ts"]
