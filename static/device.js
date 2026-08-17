@@ -76,7 +76,7 @@ async function load() {
         <span class="type-chip${d.is_mine ? ' mine' : ''}">${d.last_type || '?'}</span>
         <h2>${d.my_label || d.last_label || 'unnamed'}</h2>
       </div>
-      <div class="d-sub">${d.oui_name || 'unknown manufacturer'} · ${d.mac}</div>
+      <div class="d-sub">${d.oui_name || (d.last_label || 'unknown manufacturer')} · ${d.mac}</div>
 
       <div class="d-grid">
         <div class="d-stat"><b>${d.sighting_count}</b><label>sightings</label></div>
