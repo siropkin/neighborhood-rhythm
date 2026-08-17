@@ -15,14 +15,20 @@ const BEHAVIOR_LABELS = {
   'mobile': 'mobile', 'unknown': '—',
 };
 const behaviorLabel = b => BEHAVIOR_LABELS[b] || b;
-const behaviorHint = b => ({
-  'always-on': 'Seen every scan, all day, tight signal — fixed infrastructure.',
-  'active-cyclic': 'Present 24/7 but sightings spike on a usage cycle (cleaning, playing).',
-  'intermittent': 'On/off gaps — a device with a usage cycle (light, TV).',
-  'transient': 'Short bounded presence — a visitor who came and left.',
-  'mobile': 'Wide signal spread — moving (phone in a pocket, not fixed).',
-  'unknown': 'Not enough sightings to classify yet.',
-}[b.behavior] || '');
+const behaviorHint = b => {
+  const noSignal = b.rssi_std == null;  // mDNS / no radio readings
+  const hints = {
+    'always-on': noSignal
+      ? 'Seen every scan, all day — fixed infrastructure (no radio signal; mDNS service).'
+      : 'Seen every scan, all day, tight signal — fixed infrastructure.',
+    'active-cyclic': 'Present 24/7 but sightings spike on a usage cycle (cleaning, playing).',
+    'intermittent': 'On/off gaps — a device with a usage cycle (light, TV).',
+    'transient': 'Short bounded presence — a visitor who came and left.',
+    'mobile': 'Wide signal spread — moving (phone in a pocket, not fixed).',
+    'unknown': 'Not enough sightings to classify yet.',
+  };
+  return hints[b.behavior] || '';
+};
 
 function sparkline(canvas, values) {
   const ctx = canvas.getContext('2d');
