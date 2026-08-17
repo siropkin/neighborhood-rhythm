@@ -13,6 +13,8 @@ The pattern is a device-class signal, like the service UUID — but behavioral.
 import statistics
 import time
 
+from rules import is_random_mac
+
 # Thresholds calibrated against the live data (see the signal-pattern analysis):
 #   mmWave sensor: std 4.7, every scan, all day → always-on fixed
 #   Roomba:        std 5.0, every scan, evening spike → active-cyclic
@@ -72,8 +74,11 @@ def classify_behavior(conn, mac, now=None):
 
     # classify
     n = len(rows)
+    is_random = is_random_mac(mac)
     if n <= TRANSIENT_MAX_SIGHTINGS and active_hours <= 3:
-        behavior = "transient"
+        # a short-lived random MAC is a rotation fragment (one of a phone's
+        # rotated MACs), not a visitor. A short-lived stable MAC is a visitor.
+        behavior = "rotation" if is_random else "transient"
     elif stationarity == "mobile":
         behavior = "mobile"
     elif active_hours >= MIN_ALWAYS_ON_HOURS:
@@ -102,6 +107,7 @@ BEHAVIOR_LABELS = {
     "active-cyclic": "active-cyclic (usage spikes)",
     "intermittent": "intermittent (on/off cycle)",
     "transient": "transient (visitor)",
+    "rotation": "rotation (phone MAC fragment)",
     "mobile": "mobile (moving)",
     "unknown": "—",
 }

@@ -12,7 +12,7 @@ const fmtAgo = ts => {
 const BEHAVIOR_LABELS = {
   'always-on': 'always-on', 'active-cyclic': 'active-cyclic',
   'intermittent': 'intermittent', 'transient': 'transient',
-  'mobile': 'mobile', 'unknown': '—',
+  'rotation': 'rotation', 'mobile': 'mobile', 'unknown': '—',
 };
 const behaviorLabel = b => BEHAVIOR_LABELS[b] || b;
 const behaviorHint = b => {
@@ -24,6 +24,7 @@ const behaviorHint = b => {
     'active-cyclic': 'Present 24/7 but sightings spike on a usage cycle (cleaning, playing).',
     'intermittent': 'On/off gaps — a device with a usage cycle (light, TV).',
     'transient': 'Short bounded presence — a visitor who came and left.',
+    'rotation': 'Short-lived random MAC — one of a phone\'s rotated addresses (not a visitor).',
     'mobile': 'Wide signal spread — moving (phone in a pocket, not fixed).',
     'unknown': 'Not enough sightings to classify yet.',
   };
