@@ -26,6 +26,15 @@ const TYPE_LABELS = {
 };
 const typeLabel = t => TYPE_LABELS[t] || t;
 const colorFor = d => d.is_mine ? '#f0c674' : (TYPE_COLORS[d.last_type] || '#484f58');
+// BLE RSSI→distance is ±50% even calibrated; without tx_power it's garbage.
+// Cap the displayed distance at 50m — anything beyond is a tx_power-null
+// artifact (the radar shows rings, not points, for this reason).
+const fmtDist = d => (d == null || d > 50) ? '—' : d.toFixed(1) + 'm';
+const BEHAVIOR_LABELS = {
+  'always-on': 'always-on', 'active-cyclic': 'cyclic', 'intermittent': 'intermittent',
+  'transient': 'visitor', 'rotation': 'rotation', 'mobile': 'mobile', 'unknown': '—',
+};
+const behaviorLabel = b => BEHAVIOR_LABELS[b] || b;
 const colorForType = t => colorFor({is_mine: t === 'mine', last_type: t});
 const fmtAgo = ts => {
   if (!ts) return '—';
@@ -49,7 +58,7 @@ const getJSON = async url => {
   }
 };
 
-let state = { devices: [], positions: {}, filter: '', sortKey: 'last_seen', sortDir: -1 };
+let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1 };
 
 // ---------- Radar ----------
 // Bands scale to the real data: sub-meter when everything's close, larger when far.
@@ -173,10 +182,17 @@ function renderTable() {
   const tb = document.getElementById('device-rows');
   tb.innerHTML = '';
   let rows = state.devices.filter(d => {
+    // chip filter: type, or "rogue" (in the new-devices set), or "all"
+    const cf = state.chipFilter;
+    if (cf !== 'all') {
+      if (cf === 'rogue') { if (!state.rogueMacs.has(d.mac)) return false; }
+      else if (d.last_type !== cf) return false;
+    }
     if (!state.filter) return true;
     const q = state.filter.toLowerCase();
     return (d.last_label || '').toLowerCase().includes(q)
         || (d.my_label || '').toLowerCase().includes(q)
+        || (d.oui_name || '').toLowerCase().includes(q)
         || d.mac.toLowerCase().includes(q)
         || d.last_type.toLowerCase().includes(q);
   });
@@ -194,10 +210,10 @@ function renderTable() {
     tr.innerHTML = `
       <td><span class="type-chip${d.is_mine ? ' mine' : ''}" title="${d.last_type || ''}">${typeLabel(d.last_type || '?')}</span></td>
       <td class="dev-name"><b>${d.my_label || d.last_label || '—'}</b> <span class="mono dev-mac">${d.mac}</span></td>
-      <td class="num">${d.distance != null ? d.distance.toFixed(1) + 'm' : '—'}</td>
+      <td class="num">${fmtDist(d.distance)}</td>
       <td class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>
       <td class="num">${fmtAgo(d.last_seen)}</td>
-      <td class="num"><span class="mine-mark ${d.is_mine ? '' : 'off'}">${d.is_mine ? '★' : '☆'}</span></td>`;
+      <td class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}">${d.is_mine ? '★' : '☆'}</span></td>`;
     tr.onclick = () => { location.href = '/device/' + encodeURIComponent(d.mac); };
     tb.appendChild(tr);
   }
@@ -231,13 +247,16 @@ function renderRogue(rogues) {
   count.textContent = rogues.length;
   tb.innerHTML = rogues.map(r => `
     <tr>
-      <td class="dev-name rogue-name" data-mac="${r.mac}"><b>${r.label || r.mac}</b> <span class="mono dev-mac">${r.mac}</span></td>
+      <td class="dev-name rogue-name" data-mac="${r.mac}"><b>${r.label || r.mac}</b> <span class="mono dev-mac">${r.mac}</span>${r.behavior && r.behavior.behavior ? ` <span class="rogue-behavior">${behaviorLabel(r.behavior.behavior)}</span>` : ''}</td>
       <td>${r.oui_name || '—'}</td>
       <td><span class="type-chip">${typeLabel(r.device_class || '?')}</span></td>
-      <td class="num">${fmtAgo(r.first_seen)}</td>
+      <td>${r.source || '—'}</td>
+      <td class="num">${r.rssi != null ? r.rssi.toFixed(0) : '—'}</td>
+      <td class="num">${fmtDist(r.distance)}</td>
+      <td class="num">${fmtAgo(r.device_last_seen || r.ts)}</td>
       <td class="rogue-actions">
-        <button class="rogue-btn known" data-mac="${r.mac}">known</button>
-        <button class="rogue-btn dismiss" data-mac="${r.mac}">dismiss</button>
+        <button class="rogue-btn known" data-mac="${r.mac}">Mark known</button>
+        <button class="rogue-btn dismiss" data-mac="${r.mac}">Dismiss</button>
       </td>
     </tr>`).join('');
   // click the device name → device details page (like the main table)
@@ -273,6 +292,7 @@ async function refresh() {
     document.getElementById('s-scan').textContent = fmtAgo(stats.last_scan);
     state.devices = now.devices;
     state.positions = positions.positions;
+    state.rogueMacs = new Set((rogues.rogues || []).map(r => r.mac));
     drawRadar();
     renderLegend();
     renderTypeBreakdown();
@@ -293,6 +313,12 @@ async function refresh() {
 // ---------- wire up ----------
 document.getElementById('filter').oninput = e => { state.filter = e.target.value; renderTable(); };
 document.getElementById('btn-refresh').onclick = () => { refresh(); resetTimer(); };
+document.querySelectorAll('#filter-chips .chip').forEach(chip => chip.onclick = () => {
+  document.querySelectorAll('#filter-chips .chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  state.chipFilter = chip.dataset.filter;
+  renderTable();
+});
 document.querySelectorAll('th[data-sort]').forEach(th => {
   th.onclick = () => {
     const k = th.dataset.sort;

@@ -26,18 +26,18 @@
   <div class="loading" id="loading"><span class="spinner"></span><span>scanning the neighborhood…</span></div>
   <div id="content" class="content-hidden">
   <section class="stats-row" id="stats">
-    <span class="stat"><b id="s-real">0</b><label>real devices</label></span>
-    <span class="stat"><b id="s-total">0</b><label>ever seen</label></span>
-    <span class="stat"><b id="s-current">0</b><label>active now</label></span>
-    <span class="stat"><b id="s-wifi">0</b><label>wifi networks</label></span>
-    <span class="stat"><b id="s-sensors">0</b><label>pis</label></span>
+    <span class="stat" title="Stable devices with a vendor or known type (seen 3+ times) — the honest inventory count"><b id="s-real">0</b><label>real devices</label></span>
+    <span class="stat" title="Every MAC ever seen, including drive-bys and rotating phones"><b id="s-total">0</b><label>ever seen</label></span>
+    <span class="stat" title="Devices seen in the last scan (active right now)"><b id="s-current">0</b><label>active now</label></span>
+    <span class="stat" title="WiFi access points in range (neighbor routers, not your devices)"><b id="s-wifi">0</b><label>wifi networks</label></span>
+    <span class="stat" title="Raspberry Pi scanners running the collector"><b id="s-sensors">0</b><label>scanners</label></span>
   </section>
 
   <section class="rogue-panel" id="rogue-panel" hidden>
     <div class="panel-head"><h2>New devices</h2><span class="rogue-count" id="rogue-count"></span></div>
     <p class="rogue-hint">Stable-MAC devices that appeared and aren't in your known baseline. Mark them known or dismiss.</p>
     <div class="table-wrap"><table id="rogue-table">
-      <thead><tr><th>device</th><th>vendor</th><th>type</th><th class="num">first seen</th><th></th></tr></thead>
+      <thead><tr><th>device</th><th>vendor</th><th>type</th><th>source</th><th class="num">rssi</th><th class="num">dist</th><th class="num">last seen</th><th></th></tr></thead>
       <tbody id="rogue-rows"></tbody>
     </table></div>
   </section>
@@ -51,6 +51,7 @@
     <section class="radar-panel">
       <div class="panel-head"><h2>Radar</h2></div>
       <canvas id="radar" width="360" height="360"></canvas>
+      <div class="radar-caption">each dot/ring is a device; distance from center = estimated distance from the scanner (±50%)</div>
       <div class="legend" id="radar-legend"></div>
     </section>
   </div>
@@ -58,7 +59,17 @@
   <section class="table-panel">
     <div class="panel-head">
       <h2>Devices</h2>
-      <input id="filter" type="search" placeholder="filter…" autocomplete="off">
+      <input id="filter" type="search" placeholder="filter by name/mac/vendor…" autocomplete="off">
+    </div>
+    <div class="filter-chips" id="filter-chips">
+      <span class="chip active" data-filter="all">all</span>
+      <span class="chip" data-filter="rogue">new</span>
+      <span class="chip" data-filter="iot">iot</span>
+      <span class="chip" data-filter="apple-device">apple</span>
+      <span class="chip" data-filter="speaker">speakers</span>
+      <span class="chip" data-filter="sensor">sensors</span>
+      <span class="chip" data-filter="phone-anon">phones</span>
+      <span class="chip" data-filter="unknown">unknown</span>
     </div>
     <div class="table-wrap">
       <table id="device-table">

@@ -312,12 +312,33 @@ def api_fingerprints():
 @app.route("/api/rogue")
 def api_rogue():
     """Unresolved rogue-device alerts — new stable-MAC devices not in the
-    known baseline."""
+    known baseline. Enriched with the device's live signal (rssi, distance,
+    last_seen, sighting_count) + behavior so each alert is triageable."""
+    from behavior import classify_behavior
     with db.get_db() as conn:
         rows = conn.execute(
             "SELECT * FROM rogue_events WHERE resolved=0 ORDER BY ts DESC"
         ).fetchall()
-    return jsonify({"rogues": [dict(r) for r in rows]})
+        out = []
+        for r in rows:
+            d = dict(r)
+            dev = conn.execute(
+                "SELECT last_seen, sighting_count FROM devices WHERE mac=?",
+                (r["mac"],)).fetchone()
+            if dev:
+                d["device_last_seen"] = dev["last_seen"]
+                d["sighting_count"] = dev["sighting_count"]
+            # latest sighting for live rssi + distance + source
+            s = conn.execute(
+                "SELECT rssi, distance, source FROM sightings WHERE mac=? "
+                "ORDER BY ts DESC LIMIT 1", (r["mac"],)).fetchone()
+            if s:
+                d["rssi"] = s["rssi"]
+                d["distance"] = s["distance"]
+                d["source"] = s["source"]
+            d["behavior"] = classify_behavior(conn, r["mac"])
+            out.append(d)
+    return jsonify({"rogues": out})
 
 
 @app.route("/api/rogue/known", methods=["GET", "POST"])

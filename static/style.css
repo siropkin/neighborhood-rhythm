@@ -235,3 +235,13 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .rogue-name:hover b { color: var(--accent); }
 .btn.tracked { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
 #d-track { margin-left: 8px; width: auto; }
+
+/* filter chips */
+.filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chip { font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); cursor: pointer; user-select: none; }
+.chip:hover { border-color: var(--accent); color: var(--text); }
+.chip.active { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+/* radar caption */
+.radar-caption { font-size: 10px; color: var(--muted); text-align: center; margin-top: 6px; }
+/* rogue behavior badge */
+.rogue-behavior { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 0 6px; margin-left: 6px; }
