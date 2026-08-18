@@ -61,6 +61,12 @@ NAME_RULES = [
     (lambda n: "apple" in n, "apple-device", lambda n: "Apple device", 0.8),
     (lambda n: "samsung" in n, "samsung-device", lambda n: "Samsung device", 0.75),
     (lambda n: "espressif" in n or "esp32" in n, "iot", lambda n: "ESP32 IoT", 0.8),
+    # WiFi probe-request SSIDs: a device probing for these SSIDs is that device.
+    # The probed SSID is a device-identification signal (the device is looking
+    # for the network it belongs to). Captured by the AR9271 monitor adapter.
+    (lambda n: n.startswith("sonos_"), "speaker", lambda n: "Sonos speaker", 0.85),
+    (lambda n: "coway" in n, "iot", lambda n: "Coway IoT device", 0.8),
+    (lambda n: n.startswith("whitesky"), "iot", lambda n: "WhiteSky WiFi device", 0.7),
 ]
 
 # OUI vendor -> (type, label, confidence)
@@ -76,6 +82,11 @@ OUI_RULES = {
     "texas instruments": ("iot", "IoT device (TI)", 0.55),
     "hon hai precision": ("computer", "device (Foxconn)", 0.45),  # foxconn: could be phone/PC/IoT, low conf
     "ecobee": ("thermostat", "ecobee thermostat", 0.8),
+    # probe-device OUIs (seen via WiFi probe-requests, not on our network)
+    "vantiva - connected home": ("iot", "set-top box / router (Vantiva)", 0.55),
+    "vantiva": ("iot", "set-top box / router (Vantiva)", 0.55),
+    "hp inc.": ("computer", "HP device", 0.6),
+    "mercury corporation": ("iot", "IoT device (Mercury)", 0.5),
 }
 
 # HomeKit category IDs (from _hap TXT 'ci') -> our type taxonomy.
