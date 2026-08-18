@@ -245,3 +245,9 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .radar-caption { font-size: 10px; color: var(--muted); text-align: center; margin-top: 6px; }
 /* rogue behavior badge */
 .rogue-behavior { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 0 6px; margin-left: 6px; }
+/* rogue table: 8 cols is wide — keep it compact + scrollable */
+.rogue-panel .table-wrap { overflow-x: auto; }
+.rogue-panel table { min-width: 560px; }
+.rogue-panel td, .rogue-panel th { padding: 7px 8px; font-size: 12px; white-space: nowrap; }
+.rogue-panel .dev-mac { display: none; }  /* MAC is on the device page; keep the row narrow */
+.rogue-panel .rogue-actions { white-space: nowrap; }
