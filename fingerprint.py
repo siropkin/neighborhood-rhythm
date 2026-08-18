@@ -423,9 +423,9 @@ def detect_cross_site(conn):
                d.first_seen, d.last_seen
         FROM device_aliases a
         JOIN devices d ON d.mac = a.mac
+        JOIN device_fingerprints f ON f.fingerprint_id = a.fingerprint_id
         LEFT JOIN sites s ON s.site_id = d.site_id
-        WHERE a.fingerprint_id IS NOT NULL
-          AND d.site_id IS NOT NULL AND d.site_id != ''
+        WHERE d.site_id IS NOT NULL AND d.site_id != ''
     """).fetchall()
     by_fp = defaultdict(list)
     for r in rows:
