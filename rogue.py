@@ -44,10 +44,19 @@ def detect_rogues(conn, now=None):
     known = {r["mac"] for r in conn.execute("SELECT mac FROM known_devices")}
     flagged = {r["mac"] for r in conn.execute(
         "SELECT mac FROM rogue_events WHERE resolved=0")}
+    # also dedupe by fingerprint: if any alias of a fingerprint is already
+    # known or flagged, don't re-flag the others (e.g. two Sonos MACs linked
+    # as one device shouldn't each generate a rogue event).
+    fp_known = set()
+    for mac in known | flagged:
+        row = conn.execute(
+            "SELECT fingerprint_id FROM devices WHERE mac=?", (mac,)).fetchone()
+        if row and row["fingerprint_id"]:
+            fp_known.add(row["fingerprint_id"])
     # stable-MAC devices seen MIN_SIGHTINGS+ times, sightings spanning
     # MIN_SIGHTING_SPAN_S+ (not a single-scan burst), not mDNS pseudo-keys.
     rows = conn.execute(
-        """SELECT mac, oui_name, last_type, last_label, first_seen, last_seen, sighting_count
+        """SELECT mac, oui_name, last_type, last_label, first_seen, last_seen, sighting_count, fingerprint_id
            FROM devices
            WHERE sighting_count >= ? AND (last_seen - first_seen) >= ? AND mac NOT LIKE 'mdns:%'""",
         (MIN_SIGHTINGS, MIN_SIGHTING_SPAN_S)).fetchall()
@@ -55,6 +64,9 @@ def detect_rogues(conn, now=None):
     for r in rows:
         mac = r["mac"]
         if mac in known or mac in flagged:
+            continue
+        # dedupe by fingerprint: if a linked alias is already known/flagged
+        if r["fingerprint_id"] and r["fingerprint_id"] in fp_known:
             continue
         if is_random_mac(mac):
             continue  # rotating phone — noise, not a rogue device
