@@ -384,14 +384,19 @@ startStream();
 
 // ---------- help modal + first-run banner ----------
 const helpModal = document.getElementById('help-modal');
-document.getElementById('btn-help').onclick = () => { helpModal.hidden = false; };
-document.getElementById('help-close').onclick = () => { helpModal.hidden = true; };
-helpModal.onclick = e => { if (e.target === helpModal) helpModal.hidden = true; };
+const btnHelp = document.getElementById('btn-help');
+if (btnHelp && helpModal) {
+  btnHelp.onclick = () => { helpModal.hidden = false; };
+  const helpClose = document.getElementById('help-close');
+  if (helpClose) helpClose.onclick = () => { helpModal.hidden = true; };
+  helpModal.onclick = e => { if (e.target === helpModal) helpModal.hidden = true; };
+}
 // first-run banner: show until the user dismisses it (localStorage)
 const firstrun = document.getElementById('firstrun');
 if (firstrun && !localStorage.getItem('nr-firstrun-dismissed')) {
   firstrun.hidden = false;
-  document.getElementById('firstrun-dismiss').onclick = () => {
+  const dismiss = document.getElementById('firstrun-dismiss');
+  if (dismiss) dismiss.onclick = () => {
     firstrun.hidden = true;
     localStorage.setItem('nr-firstrun-dismissed', '1');
   };

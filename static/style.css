@@ -90,6 +90,9 @@ main {
 @media (max-width: 720px) {
   .radar-row-wrap > .breakdown-panel { flex: 1 1 100%; }
   .radar-row-wrap > .radar-panel { flex: 1 1 100%; }
+  /* narrow tables: hide the MAC + identity column so the row fits, let the rest scroll */
+  .dev-mac { display: none; }
+  #device-table th[title*="linked"], #device-table td:has(.alias-link) { display: none; }
 }
 section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
 
