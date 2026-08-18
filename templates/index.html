@@ -27,6 +27,7 @@
 <main>
   <div class="loading" id="loading"><span class="spinner"></span><span>scanning the neighborhood…</span></div>
   <div id="content" class="content-hidden">
+  <div class="status-banner" id="status-banner" hidden></div>
   <section class="firstrun" id="firstrun" hidden>
     <b>Getting started</b>
     <ol>
@@ -38,8 +39,8 @@
   </section>
 
   <section class="rogue-panel" id="rogue-panel" hidden>
-    <div class="panel-head"><h2>New devices</h2><span class="rogue-count" id="rogue-count"></span></div>
-    <p class="rogue-hint">Devices that appeared and aren't in your known baseline. If you don't recognize one, it may be rogue — investigate, then mark known or dismiss.</p>
+    <div class="panel-head"><h2>Unrecognized devices</h2><span class="rogue-count" id="rogue-count"></span></div>
+    <p class="rogue-hint">Stable devices that appeared and aren't in your known baseline. We don't know if they belong — you decide: mark known, or investigate.</p>
     <div class="table-wrap"><table id="rogue-table">
       <thead><tr><th>device</th><th>vendor</th><th>type</th><th>source</th><th class="num">rssi</th><th class="num">dist</th><th class="num">last seen</th><th></th></tr></thead>
       <tbody id="rogue-rows"></tbody>
@@ -71,7 +72,10 @@
   <section class="table-panel">
     <div class="panel-head">
       <h2>Devices</h2>
-      <input id="filter" type="search" placeholder="filter by name/mac/vendor…" autocomplete="off">
+      <div class="panel-controls">
+        <input id="filter" type="search" placeholder="filter by name/mac/vendor…" autocomplete="off">
+        <button class="btn-export" id="btn-export" title="export the current inventory as CSV">⬇ CSV</button>
+      </div>
     </div>
     <div class="filter-chips" id="filter-chips">
       <span class="chip active" data-filter="all">all</span>

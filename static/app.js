@@ -225,6 +225,19 @@ function renderTable() {
 }
 
 // ---------- rogue devices (new stable-MAC devices not in baseline) ----------
+function renderStatusBanner(rogues) {
+  const el = document.getElementById('status-banner');
+  if (!el) return;
+  if (!rogues.length) {
+    el.hidden = false;
+    el.className = 'status-banner ok';
+    el.textContent = '✓ All clear — 0 unrecognized devices. Your building inventory is current.';
+  } else {
+    el.hidden = false;
+    el.className = 'status-banner warn';
+    el.textContent = `${rogues.length} unrecognized device${rogues.length>1?'s':''} to review below — mark the ones you recognize as known, investigate the rest.`;
+  }
+}
 async function rogueAction(mac, endpoint, body) {
   try {
     await fetch(endpoint, {
@@ -299,6 +312,7 @@ async function refresh() {
     renderTypeBreakdown();
     renderTable();
     renderRogue(rogues.rogues);
+    renderStatusBanner(rogues.rogues || []);
     setIndicators('ok');
     // hide the first-load overlay + reveal content once we have data
     const loading = document.getElementById('loading');
@@ -314,6 +328,7 @@ async function refresh() {
 // ---------- wire up ----------
 document.getElementById('filter').oninput = e => { state.filter = e.target.value; renderTable(); };
 document.getElementById('btn-refresh').onclick = () => { refresh(); resetTimer(); };
+document.getElementById('btn-export').onclick = () => { window.location = '/api/now?format=csv'; };
 document.querySelectorAll('#filter-chips .chip').forEach(chip => chip.onclick = () => {
   document.querySelectorAll('#filter-chips .chip').forEach(c => c.classList.remove('active'));
   chip.classList.add('active');

@@ -284,3 +284,11 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .modal-close:hover { color: var(--text); }
 .glossary dt { font-weight: 600; color: var(--text); font-size: 13px; margin-top: 10px; }
 .glossary dd { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+/* status banner (all clear / review) */
+.status-banner { border-radius: 10px; padding: 12px 18px; margin-bottom: 18px; font-size: 14px; font-weight: 500; }
+.status-banner.ok { background: rgba(63,185,80,.12); border: 1px solid var(--low); color: var(--low); }
+.status-banner.warn { background: rgba(248,81,73,.12); border: 1px solid var(--high); color: var(--high); }
+/* export button */
+.btn-export { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); padding: 5px 10px; font-size: 12px; cursor: pointer; }
+.btn-export:hover { border-color: var(--accent); color: var(--text); }

@@ -149,7 +149,7 @@ async function load() {
                 <td>${fmt(s.ts)}</td>
                 <td>${s.sensor_id}</td>
                 <td class="num">${s.rssi != null ? s.rssi.toFixed(0) + ' dBm' : '—'}</td>
-                <td class="num">${s.distance != null ? s.distance.toFixed(1) + 'm' : '—'}</td>
+                <td class="num">${s.distance != null && s.distance <= 50 ? s.distance.toFixed(1) + 'm' : '—'}</td>
                 <td>${s.source}</td>
               </tr>`).join('')}
             </tbody>

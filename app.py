@@ -6,10 +6,27 @@ from functools import wraps
 from flask import Flask, request, jsonify, render_template, Response
 
 import db
-from config import SENSOR_ID, PEER_TOKEN, ACTIVE_WINDOW_S
+from config import SENSOR_ID, PEER_TOKEN, ACTIVE_WINDOW_S, API_TOKEN
 from position import compute_position
 
 app = Flask(__name__)
+
+
+# Auth: when API_TOKEN is set, all /api/* routes require Authorization: Bearer
+# <token>. Fail closed (401) on mismatch or when the token env is set but the
+# header is missing. When unset (dev), auth is off. The dashboard HTML routes
+# (/, /device/<mac>) stay open — the browser has no token; the API is for
+# integrations. Constant-time compare to avoid timing leaks.
+import hmac
+@app.before_request
+def _api_auth():
+    if not API_TOKEN:
+        return  # dev mode — no token set, auth off
+    if not request.path.startswith('/api/'):
+        return  # dashboard HTML routes stay open
+    tok = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+    if not hmac.compare_digest(tok, API_TOKEN):
+        return jsonify({"error": "unauthorized"}), 401
 
 
 def _ts(t):
@@ -75,6 +92,19 @@ def api_now():
                 d["alias_count"] = n
             else:
                 d["alias_count"] = 1
+    if request.args.get("format") == "csv":
+        import csv as csvmod, io
+        buf = io.StringIO()
+        w = csvmod.writer(buf)
+        cols = ["mac", "oui_name", "last_label", "last_type", "source",
+                "rssi", "distance", "first_seen", "last_seen", "sighting_count",
+                "is_mine", "alias_count"]
+        w.writerow(cols)
+        for d in devices:
+            w.writerow([d.get(c) for c in cols])
+        resp = Response(buf.getvalue(), mimetype="text/csv")
+        resp.headers["Content-Disposition"] = 'attachment; filename="devices.csv"'
+        return resp
     return jsonify({"ts": time.time(), "sensor_id": SENSOR_ID, "devices": devices})
 
 
