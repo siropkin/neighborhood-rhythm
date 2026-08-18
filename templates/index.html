@@ -32,20 +32,10 @@
     <b>Getting started</b>
     <ol>
       <li>Your scanner is running — devices appear in the table below as they are detected.</li>
-      <li>Review <b>New devices</b> — mark the ones you recognize as known, dismiss drive-bys.</li>
+      <li>Review <b>Unrecognized devices</b> — mark the ones you recognize as known, dismiss drive-bys.</li>
       <li>Click any device for its signal history, behavior, and linked aliases.</li>
     </ol>
     <button class="firstrun-dismiss" id="firstrun-dismiss">got it</button>
-  </section>
-
-  <section class="rogue-panel" id="rogue-panel" hidden>
-    <div class="panel-head"><h2>Unrecognized devices</h2><span class="rogue-count" id="rogue-count"></span></div>
-    <p class="rogue-hint">Stable devices that appeared and aren't in your known baseline. We don't know if they belong — you decide: mark known, or investigate.</p>
-    <div class="rogue-batch" id="rogue-batch"><button class="rogue-btn known" id="rogue-mark-all">Mark all known</button></div>
-    <div class="table-wrap"><table id="rogue-table">
-      <thead><tr><th>device</th><th>vendor</th><th>type</th><th>source</th><th class="num">rssi</th><th class="num">dist</th><th class="num">last seen</th><th></th></tr></thead>
-      <tbody id="rogue-rows"></tbody>
-    </table></div>
   </section>
 
   <div class="radar-row-wrap">
@@ -53,7 +43,6 @@
       <div class="panel-head"><h2>Device types</h2></div>
       <div class="type-breakdown" id="type-breakdown"></div>
     </section>
-
     <section class="radar-panel">
       <div class="panel-head"><h2>Radar</h2></div>
       <canvas id="radar" width="360" height="360"></canvas>
@@ -70,19 +59,15 @@
     <span class="stat" title="Raspberry Pi scanners running the collector"><b id="s-sensors">0</b><label>scanners</label></span>
   </section>
 
-  <div class="radar-row-wrap">
-    <section class="breakdown-panel">
-      <div class="panel-head"><h2>Device types</h2></div>
-      <div class="type-breakdown" id="type-breakdown"></div>
-    </section>
-
-    <section class="radar-panel">
-      <div class="panel-head"><h2>Radar</h2></div>
-      <canvas id="radar" width="360" height="360"></canvas>
-      <div class="radar-caption">each dot/ring is a device; distance from center = estimated distance from the scanner (±50%)</div>
-      <div class="legend" id="radar-legend"></div>
-    </section>
-  </div>
+  <section class="rogue-panel" id="rogue-panel" hidden>
+    <div class="panel-head"><h2>Unrecognized devices</h2><span class="rogue-count" id="rogue-count"></span></div>
+    <p class="rogue-hint">Stable devices that appeared and aren't in your known baseline. We don't know if they belong — you decide: mark known, or investigate.</p>
+    <div class="rogue-batch" id="rogue-batch"><button class="rogue-btn known" id="rogue-mark-all">Mark all known</button></div>
+    <div class="table-wrap"><table id="rogue-table">
+      <thead><tr><th>device</th><th>vendor</th><th>type</th><th>source</th><th class="num">rssi</th><th class="num">dist</th><th class="num">last seen</th><th></th></tr></thead>
+      <tbody id="rogue-rows"></tbody>
+    </table></div>
+  </section>
 
   <section class="table-panel">
     <div class="panel-head">
