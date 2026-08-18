@@ -218,7 +218,7 @@ function renderTable() {
       <td data-label="dist" class="num">${fmtDist(d.distance)}</td>
       <td data-label="rssi" class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>
       <td data-label="seen" class="num">${fmtAgo(d.last_seen)}</td>
-      <td data-label="mine" class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}">${d.is_mine ? '★' : '☆'}</span></td>`;
+      <td data-label="mine" class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}" role="button" aria-label="${d.is_mine ? 'tagged as mine' : 'mark as mine'}" aria-pressed="${d.is_mine}">${d.is_mine ? '★' : '☆'}</span></td>`;
     tr.onclick = () => { location.href = '/device/' + encodeURIComponent(d.mac); };
     tb.appendChild(tr);
   }

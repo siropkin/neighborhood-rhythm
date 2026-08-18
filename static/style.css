@@ -4,7 +4,7 @@
   --surface-2: #1c232c;
   --border: #30363d;
   --text: #e6edf3;
-  --muted: #8b949e;
+  --muted: #b0b8c1;  /* WCAG AA: bumped from #8b949e for 4.5:1 contrast on dark */
   --accent: #58a6ff;
   --gold: #f0c674;
   --tv: #58a6ff;
@@ -155,8 +155,8 @@ section { background: var(--surface); border: 1px solid var(--border); border-ra
 .tb-row { display: grid; grid-template-columns: 10px 1fr 60px 28px; gap: 8px; align-items: center; padding: 3px 0; }
 .tb-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .tb-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tb-bar { background: var(--surface-2); border-radius: 3px; height: 6px; overflow: hidden; }
-.tb-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.tb-bar { background: var(--surface-2); border-radius: 3px; height: 10px; overflow: hidden; }
+.tb-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
 .tb-count { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* table */
@@ -309,3 +309,9 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .rogue-row { box-shadow: inset 3px 0 0 var(--high); }
 .show-all-row td { text-align: center; color: var(--accent); cursor: pointer; font-size: 12px; padding: 8px; }
 .show-all-row:hover { background: var(--surface-2); }
+
+/* design round 2: accessibility + radar legend */
+:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }
+button:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }
+/* radar legend: compact, inside the card, legible */
+.radar-panel .legend { font-size: 12px; line-height: 1.6; gap: 6px 16px; }
