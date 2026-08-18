@@ -10,6 +10,7 @@ OUI_REFRESH_DAYS = 7
 SENSOR_ID = os.environ.get("RHYTHM_SENSOR_ID", os.environ.get("HOSTNAME", "unknown"))
 PEER_TOKEN = os.environ.get("RHYTHM_PEER_TOKEN", "")  # set in config_local.py (uncommitted)
 API_TOKEN = os.environ.get("RHYTHM_API_TOKEN", "")  # if set, /api/* requires Authorization: Bearer <token>
+ALERT_WEBHOOK = os.environ.get("RHYTHM_ALERT_WEBHOOK", "")  # if set, POST rogue alerts here (Slack/Teams/SIEM)
 
 # RSSI→distance: d = 10^((ref_rssi - rssi)/(10*n)). Calibrate n per-environment if distances look off.
 PATH_LOSS_N = 2.7

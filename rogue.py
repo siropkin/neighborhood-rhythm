@@ -81,7 +81,36 @@ def detect_rogues(conn, now=None):
             (mac, r["first_seen"], now, r["oui_name"], r["last_type"],
              r["last_label"], "ble"))
         new.append(dict(r))
+        _fire_alert(mac, r, now)
     return new
+
+
+def _fire_alert(mac, dev, ts):
+    """POST a rogue alert to the configured webhook (Slack/Teams/SIEM).
+    No-op if ALERT_WEBHOOK is unset. Fire-and-forget; a failed POST is logged
+    but doesn't block the scan. The payload is SIEM-friendly (mac, vendor,
+    type, label, ts) so a SIEM can ingest it directly."""
+    from config import ALERT_WEBHOOK
+    if not ALERT_WEBHOOK:
+        return
+    import json as _json
+    import urllib.request
+    payload = _json.dumps({
+        "event": "rogue_device",
+        "mac": mac,
+        "vendor": dev.get("oui_name"),
+        "device_class": dev.get("last_type"),
+        "label": dev.get("last_label"),
+        "first_seen": dev.get("first_seen"),
+        "ts": ts,
+    }).encode()
+    try:
+        req = urllib.request.Request(ALERT_WEBHOOK, data=payload,
+                                     headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as e:
+        import sys
+        print(f"alert webhook failed: {e}", file=sys.stderr)
 
 
 def mark_known(conn, mac, label=None, note=None):

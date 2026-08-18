@@ -87,6 +87,9 @@ OUI_RULES = {
     "vantiva": ("iot", "set-top box / router (Vantiva)", 0.55),
     "hp inc.": ("computer", "HP device", 0.6),
     "mercury corporation": ("iot", "IoT device (Mercury)", 0.5),
+    "humax networks": ("iot", "HUMAX set-top box / router", 0.6),
+    "amazon technologies inc.": ("iot", "Amazon device (Echo/Fire TV)", 0.6),
+    "amazon technologies inc": ("iot", "Amazon device (Echo/Fire TV)", 0.6),
 }
 
 # HomeKit category IDs (from _hap TXT 'ci') -> our type taxonomy.
