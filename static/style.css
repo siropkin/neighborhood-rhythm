@@ -99,6 +99,15 @@ section { background: var(--surface); border: 1px solid var(--border); border-ra
   /* narrow tables: hide the MAC + identity column so the row fits, let the rest scroll */
   .dev-mac { display: none; }
   #device-table th[title*="linked"], #device-table td:has(.alias-link) { display: none; }
+  /* device table → stacked cards on mobile */
+  #device-table thead { display: none; }
+  #device-table, #device-table tbody, #device-table tr, #device-table td { display: block; width: 100%; }
+  #device-table tr { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+  #device-table td { display: flex; justify-content: space-between; padding: 4px 0; border: none; }
+  #device-table td::before { content: attr(data-label); color: var(--muted); font-size: 11px; text-transform: uppercase; }
+  #device-table td.dev-name { font-weight: 600; }
+  #device-table td.dev-name::before { content: ''; }
+  .show-all-row td::before { content: ''; }
 }
 
 /* panel heads */

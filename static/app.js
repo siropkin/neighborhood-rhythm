@@ -212,13 +212,13 @@ function renderTable() {
     const tr = document.createElement('tr');
     if (state.rogueMacs.has(d.mac)) tr.classList.add('rogue-row');
     tr.innerHTML = `
-      <td><span class="type-chip${d.is_mine ? ' mine' : ''}" title="${d.last_type || ''}">${typeLabel(d.last_type || '?')}</span></td>
-      <td class="dev-name"><b>${d.my_label || d.last_label || '—'}</b> <span class="mono dev-mac">${d.mac}</span></td>
-      <td class="num" title="${d.alias_count > 1 ? (d.alias_count + ' identifiers linked as one device') : 'single device'}">${d.alias_count > 1 ? '<b class="alias-link">' + d.alias_count + '↔</b>' : '—'}</td>
-      <td class="num">${fmtDist(d.distance)}</td>
-      <td class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>
-      <td class="num">${fmtAgo(d.last_seen)}</td>
-      <td class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}">${d.is_mine ? '★' : '☆'}</span></td>`;
+      <td data-label="type"><span class="type-chip${d.is_mine ? ' mine' : ''}" title="${d.last_type || ''}">${typeLabel(d.last_type || '?')}</span></td>
+      <td data-label="device" class="dev-name"><b>${d.my_label || d.last_label || '—'}</b> <span class="mono dev-mac">${d.mac}</span></td>
+      <td data-label="id" class="num" title="${d.alias_count > 1 ? (d.alias_count + ' identifiers linked as one device') : 'single device'}">${d.alias_count > 1 ? '<b class="alias-link">' + d.alias_count + '↔</b>' : '—'}</td>
+      <td data-label="dist" class="num">${fmtDist(d.distance)}</td>
+      <td data-label="rssi" class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>
+      <td data-label="seen" class="num">${fmtAgo(d.last_seen)}</td>
+      <td data-label="mine" class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}">${d.is_mine ? '★' : '☆'}</span></td>`;
     tr.onclick = () => { location.href = '/device/' + encodeURIComponent(d.mac); };
     tb.appendChild(tr);
   }
@@ -291,6 +291,13 @@ function renderRogue(rogues) {
     rogueAction(b.dataset.mac, '/api/rogue/known', {mac: b.dataset.mac}));
   tb.querySelectorAll('button.dismiss').forEach(b => b.onclick = () =>
     rogueAction(b.dataset.mac, `/api/rogue/${encodeURIComponent(b.dataset.mac)}/resolve`, {}));
+  const markAll = document.getElementById('rogue-mark-all');
+  if (markAll) markAll.onclick = async () => {
+    for (const r of rogues) {
+      await fetch('/api/rogue/known', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mac: r.mac}) });
+    }
+    refresh();
+  };
 }
 
 // ---------- refresh ----------
