@@ -126,6 +126,91 @@ def scan_wifi():
     return aps
 
 
+# --- WiFi probe-requests via the AR9271 monitor-mode adapter ---
+# The onboard chip can't do monitor mode; the AR9271 can. Probe-requests are
+# what phones/IoT broadcast when looking for networks — they reveal devices
+# that aren't on your network (a phone driving by, an IoT device probing for
+# its SSID). We hop 2.4GHz channels, capture a few seconds each, parse MAC +
+# the SSID they're looking for + signal. The adapter is wlan1 (phy1).
+PROBE_IFACE = "wlan1"
+PROBE_CHANNELS = [1, 6, 11, 3, 9]  # 2.4GHz — hop these, ~2s each
+PROBE_DWELL_S = 2
+
+
+def _setup_monitor_iface():
+    """Put the AR9271 adapter (wlan1) into monitor mode. Idempotent + safe:
+    no-op if the adapter isn't present. The onboard wlan0 keeps the network."""
+    import shutil
+    if not shutil.which("iw"):
+        return
+    try:
+        r = subprocess.run(["iw", "dev"], capture_output=True, text=True, timeout=5)
+        if PROBE_IFACE not in r.stdout:
+            return  # adapter not plugged in
+        # check if already monitor
+        info = subprocess.run(["iw", "dev", PROBE_IFACE, "info"],
+                              capture_output=True, text=True, timeout=3)
+        if "type monitor" in info.stdout:
+            return
+        subprocess.run(["ip", "link", "set", PROBE_IFACE, "down"],
+                       capture_output=True, timeout=3)
+        subprocess.run(["iw", "dev", PROBE_IFACE, "set", "type", "monitor"],
+                       capture_output=True, timeout=3)
+        subprocess.run(["ip", "link", "set", PROBE_IFACE, "up"],
+                       capture_output=True, timeout=3)
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        pass
+
+
+def scan_wifi_probes():
+    """Capture WiFi probe-requests on the monitor-mode adapter. Returns
+    [{mac, ssid, rssi, channel}]. No-op if the adapter isn't present."""
+    import shutil
+    if not shutil.which("tcpdump") or not shutil.which("iw"):
+        return []
+    # ensure the adapter exists and is in monitor mode
+    try:
+        r = subprocess.run(["iw", "dev"], capture_output=True, text=True, timeout=5)
+        if PROBE_IFACE not in r.stdout:
+            return []
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    out = []
+    seen = set()  # (mac, ssid) dedup within this scan
+    for ch in PROBE_CHANNELS:
+        try:
+            subprocess.run(["iw", "dev", PROBE_IFACE, "set", "channel", str(ch)],
+                           capture_output=True, timeout=3)
+            # tcpdump: -e for the radiotap header (signal), probe-req filter.
+            # One line per packet; parse SA (source MAC) + the SSID + signal.
+            r = subprocess.run(
+                ["tcpdump", "-i", PROBE_IFACE, "-e", "-l", "-c", "30",
+                 "-s", "256", "type", "mgt", "subtype", "probe-req"],
+                capture_output=True, text=True, timeout=PROBE_DWELL_S + 2)
+        except subprocess.TimeoutExpired:
+            pass  # expected — we let it run PROBE_DWELL_S then timeout
+        except (FileNotFoundError, Exception):
+            continue
+        for line in r.stdout.splitlines():
+            # "21:21:54.353377 ... -86dBm signal ... SA:50:46:ae:07:cd:21 ... Probe Request (coway_iot_01) ..."
+            sig = re.search(r"(-\d+)dBm signal", line)
+            sa = re.search(r"SA:([0-9a-fA-F:]{17})", line)
+            ssid = re.search(r"Probe Request \(([^)]*)\)", line)
+            if not sa:
+                continue
+            mac = sa.group(1)
+            name = ssid.group(1) if ssid else ""
+            key = (mac, name)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({
+                "mac": mac, "name": name, "rssi": int(sig.group(1)) if sig else None,
+                "channel": ch, "services": [],
+            })
+    return out
+
+
 # --- LAN clients via the ARP table (WiFi devices on our own network) ---
 # scan_wifi sees APs (routers), not clients. The Pi is already on the network,
 # so its ARP table lists every device that's talked to it — phones, laptops,
@@ -275,6 +360,7 @@ def _store_device(conn, raw, source):
 
 
 def main():
+    _setup_monitor_iface()
     db.init_db()
     with db.get_db() as conn:
         db.register_sensor(conn, SENSOR_ID, os.environ.get("HOSTNAME", SENSOR_ID))
@@ -297,6 +383,13 @@ def main():
         for raw in scan_lan():
             if _store_device(conn, raw, "wifi"):
                 n_dev += 1
+        # WiFi probe-requests (AR9271 monitor mode): devices probing for
+        # networks — catches phones/IoT not on your network.
+        n_probe = 0
+        for raw in scan_wifi_probes():
+            if _store_device(conn, raw, "wifi_probe"):
+                n_dev += 1
+                n_probe += 1
         n_ap = 0
         for ap in scan_wifi():
             bssid = ap.get("bssid")
