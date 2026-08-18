@@ -58,7 +58,7 @@ const getJSON = async url => {
   }
 };
 
-let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1, showAll: false };
+let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1, showAll: false, siteId: '' };
 const TABLE_LIMIT = 20;
 
 // ---------- Radar ----------
@@ -312,9 +312,10 @@ function setIndicators(state) {
 async function refresh() {
   setIndicators('active');
   try {
+    const siteQ = state.siteId ? '?site_id=' + encodeURIComponent(state.siteId) : '';
     const [stats, now, positions, rogues] = await Promise.all([
-      getJSON('/api/stats'), getJSON('/api/now'), getJSON('/api/positions'),
-      getJSON('/api/rogue'),
+      getJSON('/api/stats'), getJSON('/api/now' + siteQ), getJSON('/api/positions'),
+      getJSON('/api/rogue' + siteQ),
     ]);
     document.getElementById('s-current').textContent = stats.current;
     document.getElementById('s-total').textContent = stats.total;
@@ -414,6 +415,17 @@ function startStream() {
 refresh();
 resetTimer();
 startStream();
+// ---------- site selector (multi-tenant) ----------
+(async () => {
+  try {
+    const data = await getJSON('/api/sites');
+    const sel = document.getElementById('site-select');
+    if (!sel || !data.sites || !data.sites.length) return;
+    sel.innerHTML = '<option value="">all sites</option>' +
+      data.sites.map(s => `<option value="${s.site_id}">${s.label} (${s.sensors} scanner${s.sensors!==1?'s':''}, ${s.devices} devices)</option>`).join('');
+    sel.onchange = () => { state.siteId = sel.value; refresh(); };
+  } catch (e) { /* sites endpoint not available or empty — no selector */ }
+})();
 
 // ---------- help modal + first-run banner ----------
 const helpModal = document.getElementById('help-modal');
