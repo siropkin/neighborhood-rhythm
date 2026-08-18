@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS devices (
     last_label TEXT,
     sighting_count INTEGER DEFAULT 0,
     is_mine INTEGER DEFAULT 0,
-    my_label TEXT
+    my_label TEXT,
+    site_id TEXT          -- multi-tenant: which site this device was seen at
 );
 CREATE TABLE IF NOT EXISTS sightings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +62,13 @@ CREATE TABLE IF NOT EXISTS sensors (
     last_seen REAL,
     location_label TEXT,
     x REAL,
-    y REAL
+    y REAL,
+    site_id TEXT          -- multi-tenant: which site/building this sensor belongs to
+);
+CREATE TABLE IF NOT EXISTS sites (
+    site_id TEXT PRIMARY KEY,
+    label TEXT,
+    created_ts REAL
 );
 CREATE TABLE IF NOT EXISTS wifi_aps (
     bssid TEXT PRIMARY KEY,
@@ -156,19 +163,25 @@ def init_db():
             conn.execute("ALTER TABLE devices ADD COLUMN tracked INTEGER DEFAULT 0")
         if "watch_note" not in dcols:
             conn.execute("ALTER TABLE devices ADD COLUMN watch_note TEXT")
+        if "site_id" not in dcols:
+            conn.execute("ALTER TABLE devices ADD COLUMN site_id TEXT")
+        scols = {r[1] for r in conn.execute("PRAGMA table_info(sensors)")}
+        if "site_id" not in scols:
+            conn.execute("ALTER TABLE sensors ADD COLUMN site_id TEXT")
 
 
-def upsert_device(conn, mac, oui_name, ts, dev_type, label):
+def upsert_device(conn, mac, oui_name, ts, dev_type, label, site_id=None):
     conn.execute(
-        """INSERT INTO devices(mac, oui_name, first_seen, last_seen, last_type, last_label, sighting_count)
-           VALUES(?,?,?,?,?,?,1)
+        """INSERT INTO devices(mac, oui_name, first_seen, last_seen, last_type, last_label, sighting_count, site_id)
+           VALUES(?,?,?,?,?,?,1,?)
            ON CONFLICT(mac) DO UPDATE SET
              oui_name=COALESCE(excluded.oui_name, devices.oui_name),
              last_seen=excluded.last_seen,
              last_type=COALESCE(excluded.last_type, devices.last_type),
              last_label=COALESCE(excluded.last_label, devices.last_label),
-             sighting_count=devices.sighting_count+1""",
-        (mac, oui_name, ts, ts, dev_type, label),
+             sighting_count=devices.sighting_count+1,
+             site_id=COALESCE(excluded.site_id, devices.site_id)""",
+        (mac, oui_name, ts, ts, dev_type, label, site_id),
     )
 
 
@@ -203,18 +216,19 @@ def upsert_wifi_ap(conn, bssid, ssid, signal, channel, ts):
     )
 
 
-def register_sensor(conn, sensor_id, hostname, location_label=None, x=None, y=None):
+def register_sensor(conn, sensor_id, hostname, location_label=None, x=None, y=None, site_id=None):
     now = time.time()
     conn.execute(
-        """INSERT INTO sensors(sensor_id, hostname, first_seen, last_seen, location_label, x, y)
-           VALUES(?,?,?,?,?,?,?)
+        """INSERT INTO sensors(sensor_id, hostname, first_seen, last_seen, location_label, x, y, site_id)
+           VALUES(?,?,?,?,?,?,?,?)
            ON CONFLICT(sensor_id) DO UPDATE SET
              hostname=COALESCE(excluded.hostname, sensors.hostname),
              last_seen=excluded.last_seen,
              location_label=COALESCE(excluded.location_label, sensors.location_label),
              x=COALESCE(excluded.x, sensors.x),
-             y=COALESCE(excluded.y, sensors.y)""",
-        (sensor_id, hostname, now, now, location_label, x, y),
+             y=COALESCE(excluded.y, sensors.y),
+             site_id=COALESCE(excluded.site_id, sensors.site_id)""",
+        (sensor_id, hostname, now, now, location_label, x, y, site_id),
     )
 
 

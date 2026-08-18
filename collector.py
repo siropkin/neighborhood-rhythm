@@ -9,7 +9,7 @@ import time
 import db
 import oui
 from classify import classify
-from config import SENSOR_ID, RETENTION_DAYS, BLE_RSSI_FLOOR
+from config import SENSOR_ID, RETENTION_DAYS, BLE_RSSI_FLOOR, SITE_ID
 from position import _distance_from_rssi
 from rules import is_random_mac, HAP_CATEGORY
 from enrich import enrich
@@ -355,7 +355,7 @@ def _store_device(conn, raw, source):
     extra = enrich(raw)  # decoded Apple Continuity / sensor payloads (may be None)
     db.insert_sighting(conn, mac, SENSOR_ID, ts, rssi, distance, raw.get("name"),
                        services, source, tx_power, extra)
-    db.upsert_device(conn, mac, oui_name, ts, result["type"], result["label"])
+    db.upsert_device(conn, mac, oui_name, ts, result["type"], result["label"], site_id=SITE_ID)
     return mac
 
 
@@ -363,7 +363,7 @@ def main():
     _setup_monitor_iface()
     db.init_db()
     with db.get_db() as conn:
-        db.register_sensor(conn, SENSOR_ID, os.environ.get("HOSTNAME", SENSOR_ID))
+        db.register_sensor(conn, SENSOR_ID, os.environ.get("HOSTNAME", SENSOR_ID), site_id=SITE_ID)
         n_dev = 0
         for raw in scan_ble():
             if _store_device(conn, raw, "ble"):

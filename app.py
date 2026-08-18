@@ -79,9 +79,12 @@ def device_page(mac):
 @app.route("/api/now")
 def api_now():
     cutoff = time.time() - ACTIVE_WINDOW_S  # seen in last 10 min
+    site_id = request.args.get("site_id")  # multi-tenant filter
     with db.get_db() as conn:
         rows = db.latest_sighting_per_device(conn, cutoff)
         devices = [dict(r) for r in rows]
+        if site_id:
+            devices = [d for d in devices if d.get("site_id") == site_id]
         # alias count per device (how many MACs/keys are linked to this one
         # physical device by the fingerprinter) — the standout feature.
         for d in devices:
@@ -283,6 +286,32 @@ def api_sensors():
     return jsonify({"sensors": [dict(r) for r in rows]})
 
 
+@app.route("/api/sites", methods=["GET", "POST"])
+def api_sites():
+    """GET: list sites. POST {label}: create a site. Multi-tenant grouping —
+    each site groups one or more sensors (Pis) and their devices."""
+    if request.method == "POST":
+        body = request.get_json(force=True, silent=True) or {}
+        label = body.get("label")
+        if not label:
+            return jsonify({"error": "label required"}), 400
+        import uuid
+        site_id = str(uuid.uuid4())
+        with db.get_db() as conn:
+            conn.execute("INSERT INTO sites (site_id, label, created_ts) VALUES (?,?,?)",
+                         (site_id, label, time.time()))
+        return jsonify({"site_id": site_id, "label": label})
+    with db.get_db() as conn:
+        rows = conn.execute("SELECT * FROM sites ORDER BY created_ts DESC").fetchall()
+        # count sensors + devices per site
+        out = []
+        for r in rows:
+            n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors WHERE site_id=?", (r["site_id"],)).fetchone()["c"]
+            n_devices = conn.execute("SELECT COUNT(*) c FROM devices WHERE site_id=?", (r["site_id"],)).fetchone()["c"]
+            out.append({**dict(r), "sensors": n_sensors, "devices": n_devices})
+    return jsonify({"sites": out})
+
+
 @app.route("/stream")
 def stream():
     """SSE: push new sightings to the dashboard live."""
@@ -355,10 +384,16 @@ def api_rogue():
     known baseline. Enriched with the device's live signal (rssi, distance,
     last_seen, sighting_count) + behavior so each alert is triageable."""
     from behavior import classify_behavior
+    site_id = request.args.get("site_id")  # multi-tenant filter
     with db.get_db() as conn:
         rows = conn.execute(
             "SELECT * FROM rogue_events WHERE resolved=0 ORDER BY ts DESC"
         ).fetchall()
+        if site_id:
+            # filter rogues to devices at this site
+            rows = [r for r in rows if conn.execute(
+                "SELECT site_id FROM devices WHERE mac=?", (r["mac"],)).fetchone()
+                and conn.execute("SELECT site_id FROM devices WHERE mac=?", (r["mac"],)).fetchone()["site_id"] == site_id]
         out = []
         for r in rows:
             d = dict(r)
