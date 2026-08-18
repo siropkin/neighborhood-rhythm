@@ -11,9 +11,11 @@
 <header class="topbar">
   <div class="brand">
     <span class="refresh-indicator" id="refresh-indicator"></span>
-    Neighborhood Rhythm
+    <span class="brand-name">Neighborhood Rhythm</span>
+    <span class="brand-tag">passive device inventory &amp; rogue detection — no cameras, no agents, listens only</span>
   </div>
   <div class="header-right">
+    <button class="btn-help" id="btn-help" title="what do these terms mean?">?</button>
     <span class="last-scan">last scan <b id="s-scan">—</b></span>
     <button class="btn-refresh" id="btn-refresh" title="refresh the dashboard now">
       <span class="btn-refresh-icon">↻</span> Refresh
@@ -25,21 +27,31 @@
 <main>
   <div class="loading" id="loading"><span class="spinner"></span><span>scanning the neighborhood…</span></div>
   <div id="content" class="content-hidden">
+  <section class="firstrun" id="firstrun" hidden>
+    <b>Getting started</b>
+    <ol>
+      <li>Your scanner is running — devices appear in the table below as they are detected.</li>
+      <li>Review <b>New devices</b> — mark the ones you recognize as known, dismiss drive-bys.</li>
+      <li>Click any device for its signal history, behavior, and linked aliases.</li>
+    </ol>
+    <button class="firstrun-dismiss" id="firstrun-dismiss">got it</button>
+  </section>
+
+  <section class="rogue-panel" id="rogue-panel" hidden>
+    <div class="panel-head"><h2>New devices</h2><span class="rogue-count" id="rogue-count"></span></div>
+    <p class="rogue-hint">Devices that appeared and aren't in your known baseline. If you don't recognize one, it may be rogue — investigate, then mark known or dismiss.</p>
+    <div class="table-wrap"><table id="rogue-table">
+      <thead><tr><th>device</th><th>vendor</th><th>type</th><th>source</th><th class="num">rssi</th><th class="num">dist</th><th class="num">last seen</th><th></th></tr></thead>
+      <tbody id="rogue-rows"></tbody>
+    </table></div>
+  </section>
+
   <section class="stats-row" id="stats">
     <span class="stat" title="Stable devices with a vendor or known type (seen 3+ times) — the honest inventory count"><b id="s-real">0</b><label>real devices</label></span>
     <span class="stat" title="Every MAC ever seen, including drive-bys and rotating phones"><b id="s-total">0</b><label>ever seen</label></span>
     <span class="stat" title="Devices seen in the last scan (active right now)"><b id="s-current">0</b><label>active now</label></span>
     <span class="stat" title="WiFi access points in range (neighbor routers, not your devices)"><b id="s-wifi">0</b><label>wifi networks</label></span>
     <span class="stat" title="Raspberry Pi scanners running the collector"><b id="s-sensors">0</b><label>scanners</label></span>
-  </section>
-
-  <section class="rogue-panel" id="rogue-panel" hidden>
-    <div class="panel-head"><h2>New devices</h2><span class="rogue-count" id="rogue-count"></span></div>
-    <p class="rogue-hint">Stable-MAC devices that appeared and aren't in your known baseline. Mark them known or dismiss.</p>
-    <div class="table-wrap"><table id="rogue-table">
-      <thead><tr><th>device</th><th>vendor</th><th>type</th><th>source</th><th class="num">rssi</th><th class="num">dist</th><th class="num">last seen</th><th></th></tr></thead>
-      <tbody id="rogue-rows"></tbody>
-    </table></div>
   </section>
 
   <div class="radar-row-wrap">
@@ -77,6 +89,7 @@
           <tr>
             <th data-sort="last_type">type</th>
             <th data-sort="label">device</th>
+            <th class="num" title="how many MACs/keys are linked to this one physical device">id</th>
             <th data-sort="distance" class="num">dist</th>
             <th data-sort="rssi" class="num">rssi</th>
             <th data-sort="last_seen" class="num">last seen</th>
@@ -91,5 +104,22 @@
 </main>
 
 <script src="/static/app.js"></script>
+<div class="modal" id="help-modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><b>Glossary</b><button class="modal-close" id="help-close">×</button></div>
+    <dl class="glossary">
+      <dt>BLE</dt><dd>Bluetooth Low Energy — the radio phones, speakers, and IoT devices advertise on.</dd>
+      <dt>mDNS</dt><dd>A service a device broadcasts on your network (e.g. a printer announcing itself). No MAC, so we key by hostname.</dd>
+      <dt>wifi_probe</dt><dd>A device looking for a WiFi network — captured by the monitor-mode adapter. Catches devices not on your network.</dd>
+      <dt>real devices</dt><dd>Stable devices with a vendor or known type, seen 3+ times. The honest inventory count (excludes drive-bys).</dd>
+      <dt>ever seen</dt><dd>Every MAC ever detected, including drive-bys and rotating phones. Always ≥ real devices.</dd>
+      <dt>rogue / new device</dt><dd>A stable device that appeared and isn't in your known baseline. You decide if it belongs.</dd>
+      <dt>id (aliases)</dt><dd>How many MACs/keys the fingerprinter linked to one physical device (e.g. a phone's rotated MACs, or a speaker's BLE + mDNS).</dd>
+      <dt>behavior</dt><dd>always-on (fixed infrastructure), transient (a visitor), rotation (a phone's rotated MAC), mobile (moving).</dd>
+      <dt>privacy mode</dt><dd>A phone rotating its MAC address every ~15 min for privacy. We can't track it across rotations reliably — by design.</dd>
+      <dt>RSSI</dt><dd>Signal strength in dBm. Stronger (closer to 0) = closer. Distance is a rough estimate (±50%).</dd>
+    </dl>
+  </div>
+</div>
 </body>
 </html>

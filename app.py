@@ -65,6 +65,16 @@ def api_now():
     with db.get_db() as conn:
         rows = db.latest_sighting_per_device(conn, cutoff)
         devices = [dict(r) for r in rows]
+        # alias count per device (how many MACs/keys are linked to this one
+        # physical device by the fingerprinter) — the standout feature.
+        for d in devices:
+            if d.get("fingerprint_id"):
+                n = conn.execute(
+                    "SELECT COUNT(*) c FROM device_aliases WHERE fingerprint_id=?",
+                    (d["fingerprint_id"],)).fetchone()["c"]
+                d["alias_count"] = n
+            else:
+                d["alias_count"] = 1
     return jsonify({"ts": time.time(), "sensor_id": SENSOR_ID, "devices": devices})
 
 

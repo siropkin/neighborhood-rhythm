@@ -210,6 +210,7 @@ function renderTable() {
     tr.innerHTML = `
       <td><span class="type-chip${d.is_mine ? ' mine' : ''}" title="${d.last_type || ''}">${typeLabel(d.last_type || '?')}</span></td>
       <td class="dev-name"><b>${d.my_label || d.last_label || '—'}</b> <span class="mono dev-mac">${d.mac}</span></td>
+      <td class="num" title="${d.alias_count > 1 ? (d.alias_count + ' identifiers linked as one device') : 'single device'}">${d.alias_count > 1 ? '<b class="alias-link">' + d.alias_count + '↔</b>' : '—'}</td>
       <td class="num">${fmtDist(d.distance)}</td>
       <td class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>
       <td class="num">${fmtAgo(d.last_seen)}</td>
@@ -380,3 +381,18 @@ function startStream() {
 refresh();
 resetTimer();
 startStream();
+
+// ---------- help modal + first-run banner ----------
+const helpModal = document.getElementById('help-modal');
+document.getElementById('btn-help').onclick = () => { helpModal.hidden = false; };
+document.getElementById('help-close').onclick = () => { helpModal.hidden = true; };
+helpModal.onclick = e => { if (e.target === helpModal) helpModal.hidden = true; };
+// first-run banner: show until the user dismisses it (localStorage)
+const firstrun = document.getElementById('firstrun');
+if (firstrun && !localStorage.getItem('nr-firstrun-dismissed')) {
+  firstrun.hidden = false;
+  document.getElementById('firstrun-dismiss').onclick = () => {
+    firstrun.hidden = true;
+    localStorage.setItem('nr-firstrun-dismissed', '1');
+  };
+}
