@@ -67,7 +67,8 @@ main {
   max-width: 1200px; margin: 0 auto; padding: 20px;
 }
 /* content wrapper holds the gap between tiles (was on main before the #content wrapper) */
-#content { display: flex; flex-direction: column; gap: 20px; }
+#content { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
 /* first-load state: centered viewport overlay, content hidden until data arrives */
 .loading {
   position: fixed; inset: 0; z-index: 50;
@@ -94,7 +95,6 @@ main {
   .dev-mac { display: none; }
   #device-table th[title*="linked"], #device-table td:has(.alias-link) { display: none; }
 }
-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
 
 /* panel heads */
 .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
