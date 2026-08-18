@@ -292,3 +292,11 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 /* export button */
 .btn-export { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); padding: 5px 10px; font-size: 12px; cursor: pointer; }
 .btn-export:hover { border-color: var(--accent); color: var(--text); }
+
+/* design audit: figure-ground + sticky header + rogue accent */
+.dev-name b { color: #f5f5f5; }  /* brighten device names */
+.dev-mac { color: #8a8a8a; }     /* dim the MAC */
+#device-table thead { position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.rogue-row { box-shadow: inset 3px 0 0 var(--high); }
+.show-all-row td { text-align: center; color: var(--accent); cursor: pointer; font-size: 12px; padding: 8px; }
+.show-all-row:hover { background: var(--surface-2); }

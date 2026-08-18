@@ -58,7 +58,8 @@ const getJSON = async url => {
   }
 };
 
-let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1 };
+let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1, showAll: false };
+const TABLE_LIMIT = 20;
 
 // ---------- Radar ----------
 // Bands scale to the real data: sub-meter when everything's close, larger when far.
@@ -186,6 +187,7 @@ function renderTable() {
     const cf = state.chipFilter;
     if (cf !== 'all') {
       if (cf === 'rogue') { if (!state.rogueMacs.has(d.mac)) return false; }
+      else if (cf === 'known') { if (!d.is_mine) return false; }
       else if (d.last_type !== cf) return false;
     }
     if (!state.filter) return true;
@@ -205,8 +207,10 @@ function renderTable() {
     if (av == null) return 1; if (bv == null) return -1;
     return (av < bv ? -1 : av > bv ? 1 : 0) * dir;
   });
-  for (const d of rows) {
+  const shown = state.showAll ? rows : rows.slice(0, TABLE_LIMIT);
+  for (const d of shown) {
     const tr = document.createElement('tr');
+    if (state.rogueMacs.has(d.mac)) tr.classList.add('rogue-row');
     tr.innerHTML = `
       <td><span class="type-chip${d.is_mine ? ' mine' : ''}" title="${d.last_type || ''}">${typeLabel(d.last_type || '?')}</span></td>
       <td class="dev-name"><b>${d.my_label || d.last_label || '—'}</b> <span class="mono dev-mac">${d.mac}</span></td>
@@ -216,6 +220,13 @@ function renderTable() {
       <td class="num">${fmtAgo(d.last_seen)}</td>
       <td class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}">${d.is_mine ? '★' : '☆'}</span></td>`;
     tr.onclick = () => { location.href = '/device/' + encodeURIComponent(d.mac); };
+    tb.appendChild(tr);
+  }
+  if (!state.showAll && rows.length > TABLE_LIMIT) {
+    const tr = document.createElement('tr');
+    tr.className = 'show-all-row';
+    tr.innerHTML = `<td colspan="7">show all ${rows.length} devices ▾</td>`;
+    tr.onclick = () => { state.showAll = true; renderTable(); };
     tb.appendChild(tr);
   }
   // mark sorted header
