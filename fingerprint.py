@@ -410,6 +410,43 @@ def detect_copresence(conn, min_scans=10, min_ratio=0.8):
     return pairs
 
 
+def detect_cross_site(conn):
+    """Find fingerprints (physical devices) that appear at more than one
+    site — the 10x feature: 'this same device was seen at site A and B.'
+    A device that moves between sites (a phone, a tagged asset) gets one
+    fingerprint_id; this finds the ones spanning sites. Returns a list of
+    {fingerprint_id, label, sites: [{site_id, label, first_seen, last_seen}]}.
+    """
+    rows = conn.execute("""
+        SELECT a.fingerprint_id, f.label,
+               d.site_id, s.label AS site_label,
+               d.first_seen, d.last_seen
+        FROM device_aliases a
+        JOIN devices d ON d.mac = a.mac
+        LEFT JOIN sites s ON s.site_id = d.site_id
+        WHERE a.fingerprint_id IS NOT NULL
+          AND d.site_id IS NOT NULL AND d.site_id != ''
+    """).fetchall()
+    by_fp = defaultdict(list)
+    for r in rows:
+        by_fp[r["fingerprint_id"]].append(dict(r))
+    out = []
+    for fp_id, aliases in by_fp.items():
+        sites = {a["site_id"] for a in aliases}
+        if len(sites) < 2:
+            continue  # only at one site — not cross-site
+        label = aliases[0]["label"]
+        site_list = []
+        for site_id in sites:
+            site_aliases = [a for a in aliases if a["site_id"] == site_id]
+            site_list.append({
+                "site_id": site_id,
+                "site_label": site_aliases[0]["site_label"] or site_id,
+                "first_seen": min(a["first_seen"] for a in site_aliases),
+                "last_seen": max(a["last_seen"] for a in site_aliases),
+            })
+        out.append({"fingerprint_id": fp_id, "label": label, "sites": site_list})
+    return out
 if __name__ == "__main__":
     # Self-check: run fingerprinting over the live DB, report the dedup.
     with db.get_db() as conn:

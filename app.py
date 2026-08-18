@@ -229,6 +229,17 @@ def api_copresence():
     return jsonify({"pairs": out})
 
 
+@app.route("/api/correlation")
+def api_correlation():
+    """Cross-site device correlation — the same physical device (fingerprint)
+    seen at more than one site. The 10x feature: fleet intelligence from a
+    per-site presence sensor."""
+    from fingerprint import detect_cross_site
+    with db.get_db() as conn:
+        cross = detect_cross_site(conn)
+    return jsonify({"correlations": cross})
+
+
 @app.route("/api/positions")
 def api_positions():
     now = time.time()
