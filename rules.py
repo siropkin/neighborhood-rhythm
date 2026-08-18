@@ -98,16 +98,17 @@ HAP_CATEGORY = {
 }
 
 def is_random_mac(mac):
-    """Locally-administered bit = second bit of first octet (0b10).
-    Returns False for non-MAC keys (e.g. mDNS pseudo-macs like 'mdns:...')."""
+    """A locally-administered MAC sets either bit 0 (0b01, non-resolvable
+    private) or bit 1 (0b10, resolvable private) of the first octet.
+    Returns True if either is set (a random/rotating address). Returns False
+    for non-MAC keys (e.g. mDNS pseudo-macs like 'mdns:...')."""
     if not mac:
         return False
     hexpart = mac.replace(":", "").replace("-", "")
-    # real MACs are 12 hex chars; anything else (pseudo-macs) is not random.
     if len(hexpart) != 12:
         return False
     try:
         first = int(hexpart[0:2], 16)
     except ValueError:
         return False
-    return bool(first & 0b10)
+    return bool(first & 0b11)  # either LA bit = random
