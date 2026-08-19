@@ -267,7 +267,7 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .rogue-panel .table-wrap { overflow-x: auto; width: 100%; }
 .rogue-panel table { min-width: 560px; width: max-content; }
 .rogue-panel td, .rogue-panel th { padding: 7px 8px; font-size: 12px; white-space: nowrap; }
-.rogue-panel .dev-mac { display: none; }  /* MAC is on the device page; keep the row narrow */
+.rogue-panel .dev-mac { font-size: 10px; }  /* show MAC so duplicates are visible */
 .rogue-panel .rogue-actions { white-space: nowrap; }
 
 /* brand tag + help */

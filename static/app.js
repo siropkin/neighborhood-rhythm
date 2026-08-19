@@ -58,7 +58,7 @@ const getJSON = async url => {
   }
 };
 
-let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1, showAll: false, siteId: '' };
+let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1, showAll: false, rogueShowAll: false, siteId: '' };
 const TABLE_LIMIT = 20;
 
 // ---------- Radar ----------
@@ -270,7 +270,8 @@ function renderRogue(rogues) {
   }
   panel.hidden = false;
   count.textContent = rogues.length;
-  tb.innerHTML = rogues.map(r => `
+  const shown = state.rogueShowAll ? rogues : rogues.slice(0, 15);
+  tb.innerHTML = shown.map(r => `
     <tr>
       <td class="dev-name rogue-name" data-mac="${r.mac}"><b>${r.label || r.mac}</b> <span class="mono dev-mac">${r.mac}</span>${r.behavior && r.behavior.behavior ? ` <span class="rogue-behavior">${behaviorLabel(r.behavior.behavior)}</span>` : ''}</td>
       <td>${r.oui_name || '—'}</td>
@@ -284,6 +285,13 @@ function renderRogue(rogues) {
         <button class="rogue-btn dismiss" data-mac="${r.mac}">Dismiss</button>
       </td>
     </tr>`).join('');
+  if (!state.rogueShowAll && rogues.length > 15) {
+    const tr = document.createElement('tr');
+    tr.className = 'show-all-row';
+    tr.innerHTML = `<td colspan="8">show all ${rogues.length} unrecognized devices ▾</td>`;
+    tr.onclick = () => { state.rogueShowAll = true; renderRogue(rogues); };
+    tb.appendChild(tr);
+  }
   // click the device name → device details page (like the main table)
   tb.querySelectorAll('td.rogue-name').forEach(td =>
     td.onclick = () => { location.href = '/device/' + encodeURIComponent(td.dataset.mac); });

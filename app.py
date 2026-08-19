@@ -316,11 +316,18 @@ def api_sites():
         return jsonify({"site_id": site_id, "label": label})
     with db.get_db() as conn:
         rows = conn.execute("SELECT * FROM sites ORDER BY created_ts DESC").fetchall()
-        # count sensors + devices per site
+        # count sensors + devices per site. Devices/sensors created before the
+        # site_id column have NULL site_id — if there's only one site, count
+        # the unassigned ones as belonging to it (the default site).
         out = []
+        n_sites = len(rows)
         for r in rows:
-            n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors WHERE site_id=?", (r["site_id"],)).fetchone()["c"]
-            n_devices = conn.execute("SELECT COUNT(*) c FROM devices WHERE site_id=?", (r["site_id"],)).fetchone()["c"]
+            if n_sites == 1:
+                n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors WHERE site_id=? OR site_id IS NULL OR site_id=''", (r["site_id"],)).fetchone()["c"]
+                n_devices = conn.execute("SELECT COUNT(*) c FROM devices WHERE site_id=? OR site_id IS NULL OR site_id=''", (r["site_id"],)).fetchone()["c"]
+            else:
+                n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors WHERE site_id=?", (r["site_id"],)).fetchone()["c"]
+                n_devices = conn.execute("SELECT COUNT(*) c FROM devices WHERE site_id=?", (r["site_id"],)).fetchone()["c"]
             out.append({**dict(r), "sensors": n_sensors, "devices": n_devices})
     return jsonify({"sites": out})
 
