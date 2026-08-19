@@ -102,6 +102,62 @@ def classify_behavior(conn, mac, now=None):
     }
 
 
+def detect_time_pattern(conn, mac):
+    """Classify a device's detection-time rhythm — when it's seen, not just
+    how often. A device seen every weekday 9-5 is office equipment; one seen
+    only at 3am is suspicious; one seen once is a drive-by. Returns a dict
+    with the pattern label + the hourly histogram (for a sparkline).
+
+    Patterns:
+      always-on:   seen in most hours, flat distribution (infrastructure)
+      day-active:  seen mostly 9-17 (office equipment)
+      evening:     seen mostly 17-23 (home use — TV, lights)
+      night-only:  seen mostly 22-06 (suspicious for a building)
+      transient:   seen in <3 hours total (a visitor / drive-by)
+      irregular:   seen across hours but no clear pattern
+    """
+    rows = conn.execute("SELECT ts FROM sightings WHERE mac=? ORDER BY ts", (mac,)).fetchall()
+    if len(rows) < MIN_SIGHTINGS_FOR_BEHAVIOR:
+        return {"pattern": "unknown", "hours": {}, "peak_hour": None}
+    hours = {}
+    for r in rows:
+        h = time.localtime(r["ts"]).tm_hour
+        hours[h] = hours.get(h, 0) + 1
+    n_hours = len(hours)
+    total = sum(hours.values())
+    # peak hour + the share of sightings in the peak hour
+    peak_hour = max(hours, key=hours.get)
+    peak_share = hours[peak_hour] / total
+    # day-active share (9-17), evening share (17-23), night share (22-6)
+    day = sum(v for h, v in hours.items() if 9 <= h < 17)
+    eve = sum(v for h, v in hours.items() if 17 <= h < 23)
+    night = sum(v for h, v in hours.items() if h >= 23 or h < 6)
+    day_share = day / total
+    eve_share = eve / total
+    night_share = night / total
+    # classify
+    if n_hours <= 3:
+        pattern = "transient"
+    elif night_share >= 0.6:
+        pattern = "night-only"
+    elif day_share >= 0.5 and n_hours >= 8:
+        pattern = "day-active"
+    elif eve_share >= 0.45:
+        pattern = "evening"
+    elif n_hours >= 16:
+        pattern = "always-on"
+    else:
+        pattern = "irregular"
+    return {"pattern": pattern, "hours": dict(sorted(hours.items())),
+            "peak_hour": peak_hour, "peak_share": round(peak_share, 2)}
+
+
+TIME_PATTERN_LABELS = {
+    "always-on": "always-on", "day-active": "day-active (9-5)",
+    "evening": "evening (after-hours)", "night-only": "night-only (suspicious)",
+    "transient": "transient (visitor)", "irregular": "irregular", "unknown": "—",
+}
+
 BEHAVIOR_LABELS = {
     "always-on": "always-on (fixed)",
     "active-cyclic": "active-cyclic (usage spikes)",

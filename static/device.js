@@ -30,6 +30,12 @@ const behaviorHint = b => {
   };
   return hints[b.behavior] || '';
 };
+const TIME_PATTERN_LABELS = {
+  'always-on': 'always-on', 'day-active': 'day-active (9-5)',
+  'evening': 'evening (after-hours)', 'night-only': 'night-only (suspicious)',
+  'transient': 'transient (visitor)', 'irregular': 'irregular', 'unknown': '—',
+};
+const timePatternLabel = p => TIME_PATTERN_LABELS[p] || p;
 
 function sparkline(canvas, values) {
   const ctx = canvas.getContext('2d');
@@ -62,6 +68,7 @@ async function load() {
     const sightings = data.sightings || [];
     const b = data.behavior;
     const fp = data.fingerprint;
+    const tp = data.time_pattern;
     document.title = (d.my_label || d.last_label || MAC) + ' — Neighborhood Rhythm';
     document.getElementById('d-title').textContent = d.my_label || d.last_label || MAC;
 
@@ -98,6 +105,13 @@ async function load() {
           ${b.dwell_s != null ? `<div class="d-stat"><b>${Math.round(b.dwell_s/60)} min</b><label>dwell</label></div>` : ''}
         </div>
         <span class="d-hint">${behaviorHint(b)}</span>
+      </div>` : ''}
+
+      ${tp && tp.pattern && tp.pattern !== 'unknown' ? `<div class="d-section">
+        <h3>detection-time rhythm</h3>
+        <div class="d-stat" style="margin-bottom:8px"><b>${timePatternLabel(tp.pattern)}</b><label>pattern${tp.peak_hour != null ? ' · peak ' + tp.peak_hour + ':00' : ''}</label></div>
+        <canvas id="time-histogram" class="d-spark"></canvas>
+        <span class="d-hint">hourly detection count (when this device is seen)</span>
       </div>` : ''}
 
       ${fp && fp.aliases && fp.aliases.length > 1 ? `<div class="d-section">
@@ -163,6 +177,26 @@ async function load() {
     `;
 
     if (rssiSeries.length >= 2) sparkline(document.getElementById('signal-spark'), rssiSeries);
+
+    // detection-time histogram (24 bars, one per hour)
+    if (tp && tp.hours) {
+      const hc = document.getElementById('time-histogram');
+      if (hc) {
+        const ctx = hc.getContext('2d');
+        const W = hc.width = hc.offsetWidth || 600, H = hc.height = 80;
+        ctx.clearRect(0, 0, W, H);
+        const max = Math.max(1, ...Object.values(tp.hours));
+        const bw = W / 24;
+        for (let h = 0; h < 24; h++) {
+          const v = tp.hours[h] || 0;
+          const bh = (v / max) * (H - 16);
+          ctx.fillStyle = (tp.peak_hour === h) ? '#58a6ff' : '#30363d';
+          ctx.fillRect(h * bw + 1, H - bh, bw - 2, bh);
+        }
+        ctx.fillStyle = '#8b949e'; ctx.font = '9px monospace';
+        ctx.fillText('0', 2, H - 1); ctx.fillText('12', W/2 - 6, H - 1); ctx.fillText('23', W - 16, H - 1);
+      }
+    }
 
     document.getElementById('d-tag').onclick = async () => {
       const mine = !d.is_mine;

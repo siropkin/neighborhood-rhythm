@@ -133,13 +133,14 @@ def api_rhythm():
 
 @app.route("/api/device/<mac>")
 def api_device(mac):
-    from behavior import classify_behavior
+    from behavior import classify_behavior, detect_time_pattern
     with db.get_db() as conn:
         dev = conn.execute("SELECT * FROM devices WHERE mac=?", (mac,)).fetchone()
         sightings = conn.execute(
             "SELECT * FROM sightings WHERE mac=? ORDER BY ts", (mac,)
         ).fetchall()
         behavior = classify_behavior(conn, mac) if dev else None
+        time_pattern = detect_time_pattern(conn, mac) if dev else None
         # the fingerprint cluster: this device's fingerprint_id + all aliases
         # (other MACs linked to the same physical device)
         fp = None
@@ -152,7 +153,8 @@ def api_device(mac):
     if not dev:
         return jsonify({"error": "not found"}), 404
     return jsonify({"device": dict(dev), "sightings": [dict(s) for s in sightings],
-                    "behavior": behavior, "fingerprint": fp})
+                    "behavior": behavior, "fingerprint": fp,
+                    "time_pattern": time_pattern})
 
 
 @app.route("/api/wifi")
