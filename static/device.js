@@ -158,14 +158,34 @@ async function load() {
           <table>
             <thead><tr><th>time</th><th>sensor</th><th class="num">rssi</th><th class="num">distance</th><th>source</th></tr></thead>
             <tbody>
-            ${sightings.slice(-30).reverse().map(s => `
-              <tr>
-                <td>${fmt(s.ts)}</td>
-                <td>${s.sensor_id}</td>
-                <td class="num">${s.rssi != null ? s.rssi.toFixed(0) + ' dBm' : '—'}</td>
-                <td class="num">${s.distance != null && s.distance <= 50 ? s.distance.toFixed(1) + 'm' : '—'}</td>
-                <td>${s.source}</td>
-              </tr>`).join('')}
+            ${(() => {
+              // collapse consecutive identical sightings (same sensor+source+distance)
+              // into a summary row — the 30 identical ble rows become one "N×" row
+              const recent = sightings.slice(-30).reverse();
+              const rows = [];
+              let group = [];
+              for (const s of recent) {
+                const prev = group[group.length - 1];
+                if (prev && prev.sensor_id === s.sensor_id && prev.source === s.source && prev.distance === s.distance) {
+                  group.push(s);
+                } else {
+                  if (group.length) rows.push(group);
+                  group = [s];
+                }
+              }
+              if (group.length) rows.push(group);
+              return rows.map(g => {
+                const s = g[0];
+                const n = g.length;
+                return `<tr>
+                  <td>${n > 1 ? n + '× ' : ''}${fmt(s.ts)}</td>
+                  <td>${s.sensor_id}</td>
+                  <td class="num">${s.rssi != null ? s.rssi.toFixed(0) + ' dBm' : '—'}</td>
+                  <td class="num">${s.distance != null && s.distance <= 50 ? s.distance.toFixed(1) + 'm' : '—'}</td>
+                  <td>${s.source}</td>
+                </tr>`;
+              }).join('');
+            })()}
             </tbody>
           </table>
         </div>

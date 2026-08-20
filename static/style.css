@@ -108,6 +108,12 @@ section { background: var(--surface); border: 1px solid var(--border); border-ra
   #device-table td.dev-name { font-weight: 600; }
   #device-table td.dev-name::before { content: ''; }
   .show-all-row td::before { content: ''; }
+  /* rogue table → stacked cards on mobile (like the device table) */
+  #rogue-table thead { display: none; }
+  #rogue-table, #rogue-table tbody, #rogue-table tr, #rogue-table td { display: block; width: 100%; }
+  #rogue-table tr { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+  #rogue-table td { display: flex; justify-content: space-between; padding: 4px 0; border: none; }
+  #rogue-table td.rogue-actions { justify-content: flex-end; gap: 6px; }
 }
 
 /* panel heads */

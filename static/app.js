@@ -281,6 +281,7 @@ function renderRogue(rogues) {
       <td class="num">${fmtDist(r.distance)}</td>
       <td class="num">${fmtAgo(r.device_last_seen || r.ts)}</td>
       <td class="rogue-actions">
+        <a class="rogue-btn" href="/device/${encodeURIComponent(r.mac)}">Investigate</a>
         <button class="rogue-btn known" data-mac="${r.mac}">Mark known</button>
         <button class="rogue-btn dismiss" data-mac="${r.mac}">Dismiss</button>
       </td>
@@ -299,13 +300,6 @@ function renderRogue(rogues) {
     rogueAction(b.dataset.mac, '/api/rogue/known', {mac: b.dataset.mac}));
   tb.querySelectorAll('button.dismiss').forEach(b => b.onclick = () =>
     rogueAction(b.dataset.mac, `/api/rogue/${encodeURIComponent(b.dataset.mac)}/resolve`, {}));
-  const markAll = document.getElementById('rogue-mark-all');
-  if (markAll) markAll.onclick = async () => {
-    for (const r of rogues) {
-      await fetch('/api/rogue/known', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mac: r.mac}) });
-    }
-    refresh();
-  };
 }
 
 // ---------- refresh ----------
