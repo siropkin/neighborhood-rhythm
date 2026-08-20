@@ -86,13 +86,18 @@ async function load() {
       </div>
       <div class="d-sub">${d.oui_name || (d.last_label || 'unknown manufacturer')} · ${d.mac}</div>
 
+      <div class="d-actions">
+        <button class="btn${d.is_mine ? ' mine' : ''}" id="d-tag">${d.is_mine ? '★ tagged mine — untag' : 'tag as mine'}</button>
+        <input id="d-tag-label" class="d-tag-input" placeholder="label (optional)" value="${d.my_label || ''}">
+        <button class="btn${d.tracked ? ' tracked' : ''}" id="d-track">${d.tracked ? '◉ tracking — stop' : '◉ track this device'}</button>
+      </div>
+
       <div class="d-grid">
         <div class="d-stat"><b>${d.sighting_count}</b><label>sightings</label></div>
         <div class="d-stat"><b>${names.length}</b><label>names advertised</label></div>
         <div class="d-stat"><b>${Object.keys(bySensor).length}</b><label>sensors</label></div>
         <div class="d-stat"><b>${fmtAgo(d.last_seen)}</b><label>last seen</label></div>
         <div class="d-stat"><b>${fmtAgo(d.first_seen)}</b><label>first seen</label></div>
-        <div class="d-stat"><b>${d.is_mine ? '★ mine' : '☆'}</b><label>tagged</label></div>
       </div>
 
       ${b ? `<div class="d-section">
@@ -109,7 +114,10 @@ async function load() {
 
       ${tp && tp.pattern && tp.pattern !== 'unknown' ? `<div class="d-section">
         <h3>detection-time rhythm</h3>
-        <div class="d-stat" style="margin-bottom:8px"><b>${timePatternLabel(tp.pattern)}</b><label>pattern${tp.peak_hour != null ? ' · peak ' + tp.peak_hour + ':00' : ''}</label></div>
+        <div class="d-grid" style="margin-bottom:12px">
+          <div class="d-stat"><b>${timePatternLabel(tp.pattern)}</b><label>pattern</label></div>
+          ${tp.peak_hour != null ? `<div class="d-stat"><b>${tp.peak_hour}:00</b><label>peak hour</label></div>` : ''}
+        </div>
         <canvas id="time-histogram" class="d-spark"></canvas>
         <span class="d-hint">hourly detection count (when this device is seen)</span>
       </div>` : ''}
@@ -191,9 +199,6 @@ async function load() {
         </div>
       </div>
 
-      <button class="btn${d.is_mine ? ' mine' : ''}" id="d-tag">${d.is_mine ? '★ tagged mine — untag' : 'tag as mine'}</button>
-      <input id="d-tag-label" class="d-tag-input" placeholder="label (optional)" value="${d.my_label || ''}">
-      <button class="btn${d.tracked ? ' tracked' : ''}" id="d-track">${d.tracked ? '◉ tracking — stop' : '◉ track this device'}</button>
     `;
 
     if (rssiSeries.length >= 2) sparkline(document.getElementById('signal-spark'), rssiSeries);

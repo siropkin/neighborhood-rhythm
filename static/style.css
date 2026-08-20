@@ -325,3 +325,7 @@ button:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }
 .site-select:focus { outline: none; border-color: var(--accent); }
 .rogue-panel .vendor-col { max-width: 140px; }
 .rogue-panel td:nth-child(2) { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* device page actions section */
+.d-actions { display: flex; gap: 10px; align-items: center; margin: 14px 0 20px; flex-wrap: wrap; }
+.d-actions .d-tag-input { flex: 1; min-width: 120px; margin-top: 0; }
+.d-actions .btn { margin-top: 0; width: auto; }
