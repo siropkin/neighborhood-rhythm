@@ -346,6 +346,7 @@ def _store_device(conn, raw, source):
     oui_name = oui.lookup(mac)
     raw["oui_name"] = oui_name
     raw["is_random"] = is_random_mac(mac)
+    raw["source"] = source  # so classify() can skip the random check for LAN devices
     result = classify(raw)
     rssi = raw.get("rssi")
     tx_power = raw.get("tx_power")

@@ -67,6 +67,7 @@ NAME_RULES = [
     (lambda n: n.startswith("sonos_"), "speaker", lambda n: "Sonos speaker", 0.85),
     (lambda n: "coway" in n, "iot", lambda n: "Coway IoT device", 0.8),
     (lambda n: n.startswith("whitesky"), "iot", lambda n: "WhiteSky WiFi device", 0.7),
+    (lambda n: "mamaroo" in n, "iot", lambda n: "mamaRoo infant rocker", 0.85),
 ]
 
 # OUI vendor -> (type, label, confidence)
