@@ -488,10 +488,28 @@ def api_stats():
         # counts every MAC ever seen; this is the stable-device count.
         real = conn.execute("SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3").fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
+        # chart data: 24h activity rhythm (sightings per hour, last 24h)
+        import collections
+        rhythm = [0] * 24
+        for r in conn.execute("SELECT ts FROM sightings WHERE ts >= ?", (now - 86400,)).fetchall():
+            rhythm[time.localtime(r["ts"]).tm_hour] += 1
+        # device-type distribution (active now)
+        type_counts = collections.Counter()
+        for r in conn.execute("SELECT last_type FROM devices WHERE last_seen >= ?", (current_cutoff,)).fetchall():
+            type_counts[r["last_type"] or "unknown"] += 1
+        # signal-strength buckets (active now)
+        rssi_buckets = {"near": 0, "mid": 0, "far": 0, "very far": 0}
+        for r in conn.execute("SELECT rssi FROM sightings WHERE ts >= ? AND rssi IS NOT NULL", (current_cutoff,)).fetchall():
+            v = r["rssi"]
+            if v >= -60: rssi_buckets["near"] += 1
+            elif v >= -70: rssi_buckets["mid"] += 1
+            elif v >= -80: rssi_buckets["far"] += 1
+            else: rssi_buckets["very far"] += 1
     return jsonify({
         "current": current, "total": total, "real": real,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
         "last_scan": last,
+        "rhythm": rhythm, "type_counts": dict(type_counts), "rssi_buckets": rssi_buckets,
     })
 
 

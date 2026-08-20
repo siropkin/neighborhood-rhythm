@@ -83,6 +83,78 @@ function pickBands(maxDist) {
   return bands.length ? bands : [top];
 }
 
+// ---------- charts: 24h rhythm, device-type donut, signal histogram ----------
+function drawRhythmChart(rhythm) {
+  const c = document.getElementById('rhythm-chart');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width = c.offsetWidth || 360, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!rhythm) return;
+  const max = Math.max(1, ...rhythm);
+  const bw = W / 24;
+  for (let h = 0; h < 24; h++) {
+    const bh = (rhythm[h] / max) * (H - 20);
+    ctx.fillStyle = (h >= 8 && h <= 22) ? '#58a6ff' : '#30363d';
+    ctx.fillRect(h * bw + 1, H - bh - 14, bw - 2, bh);
+  }
+  ctx.fillStyle = '#8b949e'; ctx.font = '9px monospace';
+  ctx.fillText('0', 2, H - 2); ctx.fillText('12', W/2 - 6, H - 2); ctx.fillText('23', W - 16, H - 2);
+}
+
+function drawTypeDonut(typeCounts) {
+  const c = document.getElementById('type-chart');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width = c.offsetWidth || 360, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!typeCounts) return;
+  const entries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, n]) => s + n, 0) || 1;
+  const cx = W/2, cy = H/2, r = Math.min(cx, cy) - 10;
+  let start = -Math.PI / 2;
+  for (const [t, n] of entries) {
+    const angle = (n / total) * 2 * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, start + angle);
+    ctx.closePath();
+    ctx.fillStyle = colorForType(t);
+    ctx.fill();
+    start += angle;
+  }
+  // hole
+  ctx.fillStyle = 'var(--surface)';
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.6, 0, 2*Math.PI); ctx.fill();
+  ctx.fillStyle = 'var(--text)'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(total, cx, cy + 5);
+  ctx.textAlign = 'start';
+}
+
+function drawRssiHistogram(rssiBuckets) {
+  const c = document.getElementById('rssi-chart');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width = c.offsetWidth || 360, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!rssiBuckets) return;
+  const labels = ['near', 'mid', 'far', 'very far'];
+  const colors = ['#3fb950', '#58a6ff', '#d29922', '#f85149'];
+  const max = Math.max(1, ...labels.map(l => rssiBuckets[l] || 0));
+  const bw = W / 4;
+  for (let i = 0; i < 4; i++) {
+    const v = rssiBuckets[labels[i]] || 0;
+    const bh = (v / max) * (H - 24);
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(i * bw + 4, H - bh - 16, bw - 8, bh);
+    ctx.fillStyle = '#8b949e'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(v, i * bw + bw/2, H - bh - 20);
+    ctx.fillText(labels[i], i * bw + bw/2, H - 4);
+  }
+  ctx.textAlign = 'start';
+}
+
+// legacy radar (kept for reference, no longer rendered)
 function drawRadar() {
   const c = document.getElementById('radar');
   const ctx = c.getContext('2d');
@@ -328,9 +400,9 @@ async function refresh() {
     state.devices = now.devices;
     state.positions = positions.positions;
     state.rogueMacs = new Set((rogues.rogues || []).map(r => r.mac));
-    drawRadar();
-    renderLegend();
-    renderTypeBreakdown();
+    drawRhythmChart(stats.rhythm);
+    drawTypeDonut(stats.type_counts);
+    drawRssiHistogram(stats.rssi_buckets);
     renderTable();
     renderRogue(rogues.rogues);
     renderStatusBanner(rogues.rogues || []);

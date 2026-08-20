@@ -39,16 +39,21 @@
     <button class="firstrun-dismiss" id="firstrun-dismiss">got it</button>
   </section>
 
-  <div class="radar-row-wrap">
-    <section class="breakdown-panel">
-      <div class="panel-head"><h2>Device types</h2></div>
-      <div class="type-breakdown" id="type-breakdown"></div>
+  <div class="charts-row-wrap">
+    <section class="chart-panel">
+      <div class="panel-head"><h2>24h activity rhythm</h2></div>
+      <canvas id="rhythm-chart" width="360" height="140"></canvas>
+      <span class="d-hint">sightings per hour (last 24h) — the building's pulse</span>
     </section>
-    <section class="radar-panel">
-      <div class="panel-head"><h2>Radar</h2></div>
-      <canvas id="radar" width="360" height="360"></canvas>
-      <div class="radar-caption">each dot/ring is a device; distance from center = estimated distance from the scanner (±50%)</div>
-      <div class="legend" id="radar-legend"></div>
+    <section class="chart-panel">
+      <div class="panel-head"><h2>Device types</h2></div>
+      <canvas id="type-chart" width="360" height="140"></canvas>
+      <span class="d-hint">active devices by type (donut)</span>
+    </section>
+    <section class="chart-panel">
+      <div class="panel-head"><h2>Signal strength</h2></div>
+      <canvas id="rssi-chart" width="360" height="140"></canvas>
+      <span class="d-hint">active devices by signal strength (near → far)</span>
     </section>
   </div>
 
