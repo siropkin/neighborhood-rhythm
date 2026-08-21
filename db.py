@@ -173,14 +173,14 @@ def init_db():
 def upsert_device(conn, mac, oui_name, ts, dev_type, label, site_id=None):
     conn.execute(
         """INSERT INTO devices(mac, oui_name, first_seen, last_seen, last_type, last_label, sighting_count, site_id)
-           VALUES(?,?,?,?,?,?,1,?)
+           VALUES(?,?,?,?,?,?,1,NULLIF(?, ''))
            ON CONFLICT(mac) DO UPDATE SET
              oui_name=COALESCE(excluded.oui_name, devices.oui_name),
              last_seen=excluded.last_seen,
              last_type=COALESCE(excluded.last_type, devices.last_type),
              last_label=COALESCE(excluded.last_label, devices.last_label),
              sighting_count=devices.sighting_count+1,
-             site_id=COALESCE(excluded.site_id, devices.site_id)""",
+             site_id=COALESCE(NULLIF(excluded.site_id, ''), devices.site_id)""",
         (mac, oui_name, ts, ts, dev_type, label, site_id),
     )
 

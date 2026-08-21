@@ -91,10 +91,13 @@ function drawRhythmChart(rhythm) {
   const W = c.width = c.offsetWidth || 360, H = c.height;
   ctx.clearRect(0, 0, W, H);
   if (!rhythm) return;
-  const max = Math.max(1, ...rhythm);
+  // cap the y-axis at the 95th percentile so one outlier bar doesn't dwarf the rest
+  const sorted = [...rhythm].sort((a, b) => a - b);
+  const p95 = sorted[Math.floor(sorted.length * 0.95)] || Math.max(...rhythm);
+  const max = Math.max(1, p95 * 1.1);
   const bw = W / 24;
   for (let h = 0; h < 24; h++) {
-    const bh = (rhythm[h] / max) * (H - 20);
+    const bh = Math.min((rhythm[h] / max) * (H - 20), H - 20);
     ctx.fillStyle = (h >= 8 && h <= 22) ? '#58a6ff' : '#30363d';
     ctx.fillRect(h * bw + 1, H - bh - 14, bw - 2, bh);
   }
@@ -129,6 +132,12 @@ function drawTypeDonut(typeCounts) {
   ctx.fillStyle = 'var(--text)'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
   ctx.fillText(total, cx, cy + 5);
   ctx.textAlign = 'start';
+  // color-coded legend
+  const legend = document.getElementById('type-legend');
+  if (legend) {
+    legend.innerHTML = entries.map(([t, n]) =>
+      `<span><i style="background:${colorForType(t)}"></i>${typeLabel(t)} ${n}</span>`).join('');
+  }
 }
 
 function drawRssiHistogram(rssiBuckets) {
@@ -138,7 +147,7 @@ function drawRssiHistogram(rssiBuckets) {
   const W = c.width = c.offsetWidth || 360, H = c.height;
   ctx.clearRect(0, 0, W, H);
   if (!rssiBuckets) return;
-  const labels = ['near', 'mid', 'far', 'very far'];
+  const labels = ['≥-60 dBm', '-60 to -70', '-70 to -80', '<-80 dBm'];
   const colors = ['#3fb950', '#58a6ff', '#d29922', '#f85149'];
   const max = Math.max(1, ...labels.map(l => rssiBuckets[l] || 0));
   const bw = W / 4;
