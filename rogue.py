@@ -114,12 +114,13 @@ def _fire_alert(mac, dev, ts):
 
 
 def mark_known(conn, mac, label=None, note=None):
-    """Add a MAC to the known baseline (and resolve any open rogue event)."""
+    """Add a MAC to the known baseline, tag it as mine, and resolve any open rogue event."""
     now = time.time()
     conn.execute(
         "INSERT INTO known_devices(mac, label, added_ts, note) VALUES(?,?,?,?) "
         "ON CONFLICT(mac) DO UPDATE SET label=COALESCE(excluded.label, known_devices.label)",
         (mac, label, now, note))
+    conn.execute("UPDATE devices SET is_mine=1 WHERE mac=?", (mac,))
     conn.execute("UPDATE rogue_events SET resolved=1, note=? WHERE mac=? AND resolved=0",
                  (note, mac))
 

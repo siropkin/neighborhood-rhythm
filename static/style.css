@@ -71,10 +71,10 @@ h2 {
 .kpi-tile {
   flex: 1 1 200px; min-width: 200px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-  padding: 12px 16px; display: flex; flex-direction: column;
+  padding: 12px 16px; display: flex; align-items: center; gap: 12px;
 }
 .kpi-tile b { font-size: 20px; font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-.kpi-tile label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 6px; }
+.kpi-tile label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 
 /* layout — stats row, then radar+breakdown row, then table */
 main {
@@ -118,12 +118,6 @@ section { background: var(--surface); border: 1px solid var(--border); border-ra
   #device-table td.dev-name { font-weight: 600; }
   #device-table td.dev-name::before { content: ''; }
   .show-all-row td::before { content: ''; }
-  /* rogue table → stacked cards on mobile (like the device table) */
-  #rogue-table thead { display: none; }
-  #rogue-table, #rogue-table tbody, #rogue-table tr, #rogue-table td { display: block; width: 100%; }
-  #rogue-table tr { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
-  #rogue-table td { display: flex; justify-content: space-between; padding: 4px 0; border: none; }
-  #rogue-table td.rogue-actions { justify-content: flex-end; gap: 6px; }
 }
 
 /* panel heads */
@@ -249,23 +243,12 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .d-tag-input { margin-top: 8px; width: 100%; padding: 8px; font-size: 13px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
 .d-tag-input:focus { outline: none; border-color: var(--accent); }
 
-/* ---- rogue panel (new devices) ---- */
-.rogue-panel { background: var(--surface); border: 1px solid #da3633; border-radius: 10px; padding: 16px 20px; margin-bottom: 18px; }
-.rogue-panel .panel-head { display: flex; align-items: center; gap: 10px; }
-.rogue-panel h2 { color: #f85149; }
-.rogue-count { background: #da3633; color: #fff; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; font-variant-numeric: tabular-nums; }
-.rogue-hint { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
-/* rogue table inherits the global table/th/td rules; only override what differs:
-   non-sortable headers (no cursor), and right-align the first-seen column. */
-.rogue-panel th { cursor: default; }
-.rogue-panel th.num, .rogue-panel td.num { text-align: right; }
+/* ---- rogue actions (inline in the device table) ---- */
 .rogue-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .rogue-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .rogue-btn:hover { border-color: var(--accent); }
 .rogue-btn.known:hover { border-color: #2ea043; color: #2ea043; }
 .rogue-btn.dismiss:hover { border-color: #f85149; color: #f85149; }
-.rogue-name { cursor: pointer; }
-.rogue-name:hover b { color: var(--accent); }
 .btn.tracked { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
 #d-track { margin-left: 8px; width: auto; }
 
@@ -278,13 +261,6 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .radar-caption { font-size: 10px; color: var(--muted); text-align: center; margin-top: 6px; }
 /* rogue behavior badge */
 .rogue-behavior { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 0 6px; margin-left: 6px; }
-/* rogue table: 8 cols is wide — keep it compact + scrollable */
-.rogue-panel { max-width: 100%; overflow: hidden; }
-.rogue-panel .table-wrap { overflow-x: auto; width: 100%; }
-.rogue-panel table { min-width: 560px; width: max-content; }
-.rogue-panel td, .rogue-panel th { padding: 7px 8px; font-size: 12px; white-space: nowrap; }
-.rogue-panel .dev-mac { font-size: 10px; }  /* show MAC so duplicates are visible */
-.rogue-panel .rogue-actions { white-space: nowrap; }
 
 /* brand tag + help */
 .brand-tag { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 8px; }
@@ -333,8 +309,6 @@ button:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }
 .radar-panel .legend { font-size: 12px; line-height: 1.6; gap: 6px 16px; }
 .site-select { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 5px 8px; font-size: 12px; max-width: 180px; }
 .site-select:focus { outline: none; border-color: var(--accent); }
-.rogue-panel .vendor-col { max-width: 140px; }
-.rogue-panel td:nth-child(2) { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* device page actions section */
 .d-actions { display: flex; gap: 10px; align-items: center; margin: 14px 0 20px; flex-wrap: wrap; }
 .d-actions .d-tag-input { flex: 1; min-width: 120px; margin-top: 0; }

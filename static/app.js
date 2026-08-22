@@ -70,7 +70,7 @@ const getJSON = async url => {
   }
 };
 
-let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1, showAll: false, rogueShowAll: false, siteId: '' };
+let state = { devices: [], positions: {}, filter: '', chipFilter: 'all', rogueMacs: new Set(), sortKey: 'last_seen', sortDir: -1, showAll: false, siteId: '' };
 const TABLE_LIMIT = 20;
 
 // ---------- Radar ----------
@@ -322,7 +322,8 @@ function renderTable() {
   const shown = state.showAll ? rows : rows.slice(0, TABLE_LIMIT);
   for (const d of shown) {
     const tr = document.createElement('tr');
-    if (state.rogueMacs.has(d.mac)) tr.classList.add('rogue-row');
+    const isRogue = state.rogueMacs.has(d.mac);
+    if (isRogue) tr.classList.add('rogue-row');
     tr.innerHTML = `
       <td data-label="type"><span class="type-chip${d.is_mine ? ' mine' : ''}" title="${d.last_type || ''}">${typeLabel(d.last_type || '?')}</span></td>
       <td data-label="device" class="dev-name"><b>${d.my_label || d.last_label || '—'}</b> <span class="mono dev-mac">${d.mac}</span></td>
@@ -330,17 +331,27 @@ function renderTable() {
       <td data-label="dist" class="num">${fmtDist(d.distance)}</td>
       <td data-label="rssi" class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>
       <td data-label="seen" class="num">${fmtAgo(d.last_seen)}</td>
-      <td data-label="mine" class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}" role="button" aria-label="${d.is_mine ? 'tagged as mine' : 'mark as mine'}" aria-pressed="${d.is_mine}">${d.is_mine ? '★' : '☆'}</span></td>`;
+      <td data-label="mine" class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}" role="button" aria-label="${d.is_mine ? 'tagged as mine' : 'mark as mine'}" aria-pressed="${d.is_mine}">${d.is_mine ? '★' : '☆'}</span></td>
+      <td data-label="" class="rogue-actions">${isRogue ? `<button class="rogue-btn known" data-mac="${d.mac}">Mark known</button><button class="rogue-btn dismiss" data-mac="${d.mac}">Dismiss</button>` : ''}</td>`;
     tr.onclick = () => { location.href = withToken('/device/' + encodeURIComponent(d.mac)); };
     tb.appendChild(tr);
   }
   if (!state.showAll && rows.length > TABLE_LIMIT) {
     const tr = document.createElement('tr');
     tr.className = 'show-all-row';
-    tr.innerHTML = `<td colspan="7">show all ${rows.length} devices ▾</td>`;
+    tr.innerHTML = `<td colspan="8">show all ${rows.length} devices ▾</td>`;
     tr.onclick = () => { state.showAll = true; renderTable(); };
     tb.appendChild(tr);
   }
+  // wire up rogue action buttons (Mark known / Dismiss) in the device table
+  // stopPropagation so the row click (→ device page) doesn't fire on button clicks
+  tb.querySelectorAll('button.rogue-btn').forEach(b => b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains('known'))
+      rogueAction(b.dataset.mac, '/api/rogue/known', {mac: b.dataset.mac});
+    else
+      rogueAction(b.dataset.mac, `/api/rogue/${encodeURIComponent(b.dataset.mac)}/resolve`, {});
+  });
   // mark sorted header
   document.querySelectorAll('th').forEach(th => {
     th.classList.toggle('sorted', th.dataset.sort === state.sortKey);
@@ -358,7 +369,14 @@ function renderStatusBanner(rogues) {
   } else {
     el.hidden = false;
     el.className = 'status-banner warn';
-    el.textContent = `${rogues.length} unrecognized device${rogues.length>1?'s':''} to review below — mark the ones you recognize as known, investigate the rest.`;
+    el.innerHTML = `${rogues.length} unrecognized device${rogues.length>1?'s':''} to review — <a href="#" id="review-rogues">review them</a> (filter the table to "new" below)`;
+    const link = document.getElementById('review-rogues');
+    if (link) link.onclick = (e) => {
+      e.preventDefault();
+      const chip = document.querySelector('.chip[data-filter="rogue"]');
+      if (chip) chip.click();
+      document.getElementById('device-table').scrollIntoView({ behavior: 'smooth' });
+    };
   }
 }
 async function rogueAction(mac, endpoint, body) {
@@ -369,53 +387,6 @@ async function rogueAction(mac, endpoint, body) {
     });
     refresh();
   } catch (e) { console.error('rogue action failed', e); }
-}
-function renderRogue(rogues) {
-  const panel = document.getElementById('rogue-panel');
-  if (!panel) return;
-  const tb = document.getElementById('rogue-rows');
-  const count = document.getElementById('rogue-count');
-  if (!rogues || !rogues.length) {
-    panel.hidden = true;
-    tb.innerHTML = '';
-    return;
-  }
-  panel.hidden = false;
-  count.textContent = rogues.length;
-  const shown = state.rogueShowAll ? rogues : rogues.slice(0, 15);
-  tb.innerHTML = shown.map(r => `
-    <tr>
-      <td class="dev-name rogue-name" data-mac="${r.mac}"><b>${r.label || r.mac}</b> <span class="mono dev-mac">${r.mac}</span>${r.behavior && r.behavior.behavior ? ` <span class="rogue-behavior">${behaviorLabel(r.behavior.behavior)}</span>` : ''}</td>
-      <td data-label="vendor">${r.oui_name || '—'}</td>
-      <td data-label="type"><span class="type-chip">${typeLabel(r.device_class || '?')}</span></td>
-      <td data-label="source">${r.source || '—'}</td>
-      <td data-label="rssi" class="num">${r.rssi != null ? r.rssi.toFixed(0) : '—'}</td>
-      <td data-label="dist" class="num">${fmtDist(r.distance)}</td>
-      <td data-label="seen" class="num">${fmtAgo(r.device_last_seen || r.ts)}</td>
-      <td data-label="" class="rogue-actions">
-        <button class="rogue-btn known" data-mac="${r.mac}">Mark known</button>
-        <button class="rogue-btn dismiss" data-mac="${r.mac}">Dismiss</button>
-      </td>
-    </tr>`).join('');
-  if (!state.rogueShowAll && rogues.length > 15) {
-    const tr = document.createElement('tr');
-    tr.className = 'show-all-row';
-    tr.innerHTML = `<td colspan="8">show all ${rogues.length} unrecognized devices ▾</td>`;
-    tr.onclick = () => { state.rogueShowAll = true; renderRogue(rogues); };
-    tb.appendChild(tr);
-  }
-  // click the device name → device details page (like the main table)
-  tb.querySelectorAll('td.rogue-name').forEach(td =>
-    td.onclick = () => { location.href = withToken('/device/' + encodeURIComponent(td.dataset.mac)); });
-  // make the whole rogue row clickable (except the actions cell)
-  tb.querySelectorAll('tr').forEach(tr => {
-    if (tr.querySelector('.rogue-actions')) return;  // don't make the actions row clickable
-    tr.onclick = () => { const name = tr.querySelector('.rogue-name'); if (name) location.href = withToken('/device/' + encodeURIComponent(name.dataset.mac)); };
-  });
-  tb.querySelectorAll('button.known').forEach(b => b.onclick = () =>
-    rogueAction(b.dataset.mac, '/api/rogue/known', {mac: b.dataset.mac}));
-  tb.querySelectorAll('button.dismiss').forEach(b => b.onclick = () =>
-    rogueAction(b.dataset.mac, `/api/rogue/${encodeURIComponent(b.dataset.mac)}/resolve`, {}));
 }
 
 // ---------- refresh ----------
@@ -462,7 +433,6 @@ async function refresh() {
     drawTypeDonut(typeCounts);
     drawRssiHistogram(stats.rssi_buckets);
     renderTable();
-    renderRogue(rogues.rogues);
     renderStatusBanner(rogues.rogues || []);
     setIndicators('ok');
     // hide the first-load overlay + reveal content once we have data
