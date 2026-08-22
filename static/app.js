@@ -98,7 +98,7 @@ function drawRhythmChart(rhythm) {
   const bw = W / 24;
   for (let h = 0; h < 24; h++) {
     const bh = Math.min((rhythm[h] / max) * (H - 20), H - 20);
-    ctx.fillStyle = (h >= 8 && h <= 22) ? '#58a6ff' : '#30363d';
+    ctx.fillStyle = '#58a6ff';
     ctx.fillRect(h * bw + 1, H - bh - 14, bw - 2, bh);
   }
   ctx.fillStyle = '#8b949e'; ctx.font = '9px monospace';
@@ -356,13 +356,13 @@ function renderRogue(rogues) {
   tb.innerHTML = shown.map(r => `
     <tr>
       <td class="dev-name rogue-name" data-mac="${r.mac}"><b>${r.label || r.mac}</b> <span class="mono dev-mac">${r.mac}</span>${r.behavior && r.behavior.behavior ? ` <span class="rogue-behavior">${behaviorLabel(r.behavior.behavior)}</span>` : ''}</td>
-      <td>${r.oui_name || '—'}</td>
-      <td><span class="type-chip">${typeLabel(r.device_class || '?')}</span></td>
-      <td>${r.source || '—'}</td>
-      <td class="num">${r.rssi != null ? r.rssi.toFixed(0) : '—'}</td>
-      <td class="num">${fmtDist(r.distance)}</td>
-      <td class="num">${fmtAgo(r.device_last_seen || r.ts)}</td>
-      <td class="rogue-actions">
+      <td data-label="vendor">${r.oui_name || '—'}</td>
+      <td data-label="type"><span class="type-chip">${typeLabel(r.device_class || '?')}</span></td>
+      <td data-label="source">${r.source || '—'}</td>
+      <td data-label="rssi" class="num">${r.rssi != null ? r.rssi.toFixed(0) : '—'}</td>
+      <td data-label="dist" class="num">${fmtDist(r.distance)}</td>
+      <td data-label="seen" class="num">${fmtAgo(r.device_last_seen || r.ts)}</td>
+      <td data-label="" class="rogue-actions">
         <a class="rogue-btn" href="/device/${encodeURIComponent(r.mac)}">Investigate</a>
         <button class="rogue-btn known" data-mac="${r.mac}">Mark known</button>
         <button class="rogue-btn dismiss" data-mac="${r.mac}">Dismiss</button>
@@ -378,6 +378,11 @@ function renderRogue(rogues) {
   // click the device name → device details page (like the main table)
   tb.querySelectorAll('td.rogue-name').forEach(td =>
     td.onclick = () => { location.href = '/device/' + encodeURIComponent(td.dataset.mac); });
+  // make the whole rogue row clickable (except the actions cell)
+  tb.querySelectorAll('tr').forEach(tr => {
+    if (tr.querySelector('.rogue-actions')) return;  // don't make the actions row clickable
+    tr.onclick = () => { const name = tr.querySelector('.rogue-name'); if (name) location.href = '/device/' + encodeURIComponent(name.dataset.mac); };
+  });
   tb.querySelectorAll('button.known').forEach(b => b.onclick = () =>
     rogueAction(b.dataset.mac, '/api/rogue/known', {mac: b.dataset.mac}));
   tb.querySelectorAll('button.dismiss').forEach(b => b.onclick = () =>
