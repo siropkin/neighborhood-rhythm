@@ -174,11 +174,11 @@ function drawRssiHistogram(rssiBuckets) {
   const bw = W / 4;
   for (let i = 0; i < 4; i++) {
     const v = rssiBuckets[keys[i]] || 0;
-    const bh = (v / max) * (H - 24);
+    const bh = (v / max) * (H - 36);   // reserve 36px for the count label + x-axis label
     ctx.fillStyle = colors[i];
     ctx.fillRect(i * bw + 4, H - bh - 18, bw - 8, bh);
     ctx.fillStyle = '#8b949e'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(v, i * bw + bw/2, H - bh - 22);
+    ctx.fillText(v, i * bw + bw/2, Math.max(12, H - bh - 22));
     ctx.font = '10px monospace';
     ctx.fillText(labels[i], i * bw + bw/2, H - 4);
   }
