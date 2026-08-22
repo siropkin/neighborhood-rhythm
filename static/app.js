@@ -173,7 +173,7 @@ function drawRssiHistogram(rssiBuckets) {
   if (!rssiBuckets) return;
   const keys = ['near', 'mid', 'far', 'very far'];
   // one-line label: distance (primary) + dBm range (secondary, in brackets)
-  const labels = ['~1m (≥-60 dBm)', '~4m (-60 to -70)', '~8m (-70 to -80)', '15m+ (<-80 dBm)'];
+  const labels = ['~1m (≥-60)', '~4m (-60 to -70)', '~8m (-70 to -80)', '15m+ (<-80)'];
   // single-hue sequential ramp (dark=near, light=far) — no "closer=better" judgment
   const colors = ['#1f6feb', '#388bfd', '#58a6ff', '#8b949e'];
   const max = Math.max(1, ...keys.map(k => rssiBuckets[k] || 0));
@@ -185,7 +185,7 @@ function drawRssiHistogram(rssiBuckets) {
     ctx.fillRect(i * bw + 4, H - bh - 18, bw - 8, bh);
     ctx.fillStyle = '#8b949e'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
     ctx.fillText(v, i * bw + bw/2, Math.max(12, H - bh - 22));
-    ctx.font = '10px monospace';
+    ctx.font = (W < 200 ? '8px' : '10px') + ' monospace';
     ctx.fillText(labels[i], i * bw + bw/2, H - 4);
   }
   ctx.textAlign = 'start';
