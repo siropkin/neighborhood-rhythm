@@ -494,11 +494,16 @@ def api_stats():
         # counts every MAC ever seen; this is the stable-device count.
         real = conn.execute("SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3").fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
-        # chart data: 24h activity rhythm (sightings per hour, last 24h)
+        # chart data: 24h activity rhythm (unique devices per hour, last 24h).
+        # sightings_hourly dedups per (hour, mac, sensor, source) — one phone awake
+        # 3h = 3 rows, not 180. A device seen multiple times in the same hour counts once.
         import collections
         rhythm = [0] * 24
-        for r in conn.execute("SELECT ts FROM sightings WHERE ts >= ?", (now - 86400,)).fetchall():
-            rhythm[time.localtime(r["ts"]).tm_hour] += 1
+        for r in conn.execute(
+            "SELECT hour, COUNT(DISTINCT mac) c FROM sightings_hourly "
+            "WHERE hour >= ? GROUP BY hour",
+            (int((now - 86400) // 3600),)).fetchall():
+            rhythm[time.localtime(r["hour"] * 3600).tm_hour] += r["c"]
         # device-type distribution (active now)
         type_counts = collections.Counter()
         for r in conn.execute("SELECT last_type FROM devices WHERE last_seen >= ?", (current_cutoff,)).fetchall():
@@ -511,10 +516,19 @@ def api_stats():
             elif v >= -70: rssi_buckets["mid"] += 1
             elif v >= -80: rssi_buckets["far"] += 1
             else: rssi_buckets["very far"] += 1
+        # distinct active devices per signal source (last 10 min)
+        source_counts = {"ble": 0, "wifi": 0, "mdns": 0}
+        for r in conn.execute(
+            "SELECT source, COUNT(DISTINCT mac) c FROM sightings "
+            "WHERE ts >= ? AND source IS NOT NULL GROUP BY source",
+            (current_cutoff,)).fetchall():
+            src = r["source"]
+            if src in ("ble", "bt"): source_counts["ble"] += r["c"]
+            elif src in ("wifi", "mdns"): source_counts[src] = r["c"]
     return jsonify({
         "current": current, "total": total, "real": real,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
-        "last_scan": last,
+        "last_scan": last, "source_counts": source_counts,
         "rhythm": rhythm, "type_counts": dict(type_counts), "rssi_buckets": rssi_buckets,
     })
 

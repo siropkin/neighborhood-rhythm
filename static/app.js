@@ -115,10 +115,9 @@ function drawRhythmChart(rhythm) {
   if (!cv) return;
   const { ctx, W, H } = cv;
   if (!rhythm) return;
-  // cap the y-axis at the 95th percentile so one outlier bar doesn't dwarf the rest
-  const sorted = [...rhythm].sort((a, b) => a - b);
-  const p95 = sorted[Math.floor(sorted.length * 0.95)] || Math.max(...rhythm);
-  const max = Math.max(1, p95 * 1.1);
+  // show the real peak — no 95th-percentile cap. If one hour is 10x the rest,
+  // that's the signal (the building's pulse), not noise to hide.
+  const max = Math.max(1, Math.max(...rhythm) * 1.1);
   const bw = W / 24;
   for (let h = 0; h < 24; h++) {
     const bh = Math.min((rhythm[h] / max) * (H - 20), H - 20);
@@ -126,7 +125,8 @@ function drawRhythmChart(rhythm) {
     ctx.fillRect(h * bw + 1, H - bh - 14, bw - 2, bh);
   }
   ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace';
-  ctx.fillText('0', 2, H - 2); ctx.fillText('12', W/2 - 6, H - 2); ctx.fillText('23', W - 16, H - 2);
+  ctx.fillText('0', 2, H - 2); ctx.fillText('6', W/4 - 4, H - 2);
+  ctx.fillText('12', W/2 - 6, H - 2); ctx.fillText('18', 3*W/4 - 6, H - 2); ctx.fillText('23', W - 16, H - 2);
 }
 
 function drawTypeDonut(typeCounts) {
@@ -152,13 +152,17 @@ function drawTypeDonut(typeCounts) {
   ctx.fillStyle = 'var(--surface)';
   ctx.beginPath(); ctx.arc(cx, cy, r * 0.6, 0, 2*Math.PI); ctx.fill();
   ctx.fillStyle = 'var(--text)'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
-  ctx.fillText(total, cx, cy + 5);
+  ctx.fillText(entries.length + ' types', cx, cy);
+  ctx.font = '11px monospace'; ctx.fillStyle = 'var(--muted)';
+  ctx.fillText(total + ' devices', cx, cy + 16);
   ctx.textAlign = 'start';
-  // color-coded legend
+  // color-coded legend with count + percentage
   const legend = document.getElementById('type-legend');
   if (legend) {
-    legend.innerHTML = entries.map(([t, n]) =>
-      `<span><i style="background:${colorForType(t)}"></i>${typeLabel(t)} ${n}</span>`).join('');
+    legend.innerHTML = entries.map(([t, n]) => {
+      const pct = Math.round(n / total * 100);
+      return `<span><i style="background:${colorForType(t)}"></i>${typeLabel(t)} ${n} (${pct}%)</span>`;
+    }).join('');
   }
 }
 
@@ -168,19 +172,24 @@ function drawRssiHistogram(rssiBuckets) {
   const { ctx, W, H } = cv;
   if (!rssiBuckets) return;
   const keys = ['near', 'mid', 'far', 'very far'];
-  const labels = ['≥-60 dBm', '-60 to -70', '-70 to -80', '<-80 dBm'];
-  const colors = ['#3fb950', '#58a6ff', '#d29922', '#f85149'];
+  // distance is the primary label (what the user asks for), dBm secondary
+  const distLabels = ['~1m', '~4m', '~8m', '15m+'];
+  const dBmLabels = ['≥-60', '-60 to -70', '-70 to -80', '<-80 dBm'];
+  // single-hue sequential ramp (dark=near, light=far) — no "closer=better" judgment
+  const colors = ['#1f6feb', '#388bfd', '#58a6ff', '#8b949e'];
   const max = Math.max(1, ...keys.map(k => rssiBuckets[k] || 0));
   const bw = W / 4;
   for (let i = 0; i < 4; i++) {
     const v = rssiBuckets[keys[i]] || 0;
-    const bh = (v / max) * (H - 36);   // reserve 36px for the count label + x-axis label
+    const bh = (v / max) * (H - 40);   // reserve space for two-line label
     ctx.fillStyle = colors[i];
     ctx.fillRect(i * bw + 4, H - bh - 18, bw - 8, bh);
     ctx.fillStyle = '#8b949e'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
     ctx.fillText(v, i * bw + bw/2, Math.max(12, H - bh - 22));
-    ctx.font = '10px monospace';
-    ctx.fillText(labels[i], i * bw + bw/2, H - 4);
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText(distLabels[i], i * bw + bw/2, H - 16);
+    ctx.font = '9px monospace'; ctx.fillStyle = 'var(--muted)';
+    ctx.fillText(dBmLabels[i], i * bw + bw/2, H - 4);
   }
   ctx.textAlign = 'start';
 }
@@ -433,11 +442,25 @@ async function refresh() {
     document.getElementById('s-wifi').textContent = stats.wifi;
     document.getElementById('s-sensors').textContent = stats.sensors;
     document.getElementById('s-scan').textContent = fmtAgo(stats.last_scan);
+    // KPI tiles: stable vs random + source breakdown
+    document.getElementById('s-stable').textContent = stats.real;
+    document.getElementById('s-random').textContent = stats.total - stats.real;
+    const sc = stats.source_counts || {};
+    document.getElementById('s-src-ble').textContent = sc.ble || 0;
+    document.getElementById('s-src-wifi').textContent = sc.wifi || 0;
+    document.getElementById('s-src-mdns').textContent = sc.mdns || 0;
     state.devices = now.devices;
     state.positions = positions.positions;
     state.rogueMacs = new Set((rogues.rogues || []).map(r => r.mac));
     drawRhythmChart(stats.rhythm);
-    drawTypeDonut(stats.type_counts);
+    // device types: split mine vs unknown from the active device list so the
+    // gold slice shows your devices, not just the raw type distribution
+    const typeCounts = {};
+    for (const d of now.devices) {
+      const t = d.is_mine ? 'mine' : (d.last_type || 'unknown');
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+    }
+    drawTypeDonut(typeCounts);
     drawRssiHistogram(stats.rssi_buckets);
     renderTable();
     renderRogue(rogues.rogues);
