@@ -393,7 +393,6 @@ function renderRogue(rogues) {
       <td data-label="dist" class="num">${fmtDist(r.distance)}</td>
       <td data-label="seen" class="num">${fmtAgo(r.device_last_seen || r.ts)}</td>
       <td data-label="" class="rogue-actions">
-        <a class="rogue-btn" href="${withToken('/device/' + encodeURIComponent(r.mac))}">Investigate</a>
         <button class="rogue-btn known" data-mac="${r.mac}">Mark known</button>
         <button class="rogue-btn dismiss" data-mac="${r.mac}">Dismiss</button>
       </td>
