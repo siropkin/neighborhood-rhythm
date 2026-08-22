@@ -1,4 +1,13 @@
 // Device details page. Fetches /api/device/<mac> and renders full history.
+// Auth token (see app.js) — carried via ?token= since fetch/EventSource can't
+// set headers on a navigation. Shared localStorage key 'nr-token'.
+const AUTH_TOKEN = (() => {
+  let t = new URLSearchParams(location.search).get('t');
+  if (t) localStorage.setItem('nr-token', t);
+  else t = localStorage.getItem('nr-token') || '';
+  return t;
+})();
+const withToken = url => AUTH_TOKEN ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(AUTH_TOKEN) : url;
 const MAC = decodeURIComponent(location.pathname.replace('/device/', ''));
 const fmt = ts => ts ? new Date(ts*1000).toLocaleString() : '—';
 const fmtAgo = ts => {
@@ -58,7 +67,7 @@ async function load() {
   const btn = document.getElementById('btn-refresh');
   btn.classList.add('active');
   try {
-    const res = await fetch('/api/device/' + encodeURIComponent(MAC));
+    const res = await fetch(withToken('/api/device/' + encodeURIComponent(MAC)));
     if (!res.ok) {
       document.getElementById('d-content').innerHTML = `<p>device not found</p>`;
       return;
@@ -226,7 +235,7 @@ async function load() {
     document.getElementById('d-tag').onclick = async () => {
       const mine = !d.is_mine;
       const label = document.getElementById('d-tag-label').value || (mine ? (d.last_label || 'my device') : null);
-      await fetch('/api/device/' + encodeURIComponent(MAC) + '/tag', {
+      await fetch(withToken('/api/device/' + encodeURIComponent(MAC) + '/tag'), {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ is_mine: mine, my_label: label }),
       });
@@ -234,7 +243,7 @@ async function load() {
     };
     document.getElementById('d-track').onclick = async () => {
       const tracked = !d.tracked;
-      await fetch('/api/device/' + encodeURIComponent(MAC) + '/track', {
+      await fetch(withToken('/api/device/' + encodeURIComponent(MAC) + '/track'), {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ tracked: tracked ? 1 : 0 }),
       });

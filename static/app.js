@@ -1,4 +1,16 @@
 // Neighborhood Rhythm — radar + device table. Vanilla JS, no framework.
+// Auth: the dashboard URL carries ?t=<token> (hidden URL). We stash it in
+// localStorage and append ?token= to every API/SSE/CSV call — EventSource and
+// navigations can't set Authorization headers, so the query param is the path.
+const AUTH_TOKEN = (() => {
+  let t = new URLSearchParams(location.search).get('t');
+  if (t) localStorage.setItem('nr-token', t);
+  else t = localStorage.getItem('nr-token') || '';
+  return t;
+})();
+const authQ = AUTH_TOKEN ? '?token=' + encodeURIComponent(AUTH_TOKEN) : '';
+const withToken = url => AUTH_TOKEN ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(AUTH_TOKEN) : url;
+
 const TYPE_COLORS = {
   tv: '#58a6ff', speaker: '#bc8cff', light: '#56d364', phone: '#8b949e',
   laptop: '#79c0ff', tablet: '#a5d6ff', vacuum: '#ff9800',
@@ -49,7 +61,7 @@ const getJSON = async url => {
   // reuses a just-closed one (ERR_SOCKET_NOT_CONNECTED). A 2nd fetch succeeds.
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(withToken(url), { cache: 'no-store' });
       if (!res.ok && attempt === 0) throw new Error('http ' + res.status);
       return await res.json();
     } catch (e) {
@@ -301,7 +313,7 @@ function renderTable() {
       <td data-label="rssi" class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>
       <td data-label="seen" class="num">${fmtAgo(d.last_seen)}</td>
       <td data-label="mine" class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}" role="button" aria-label="${d.is_mine ? 'tagged as mine' : 'mark as mine'}" aria-pressed="${d.is_mine}">${d.is_mine ? '★' : '☆'}</span></td>`;
-    tr.onclick = () => { location.href = '/device/' + encodeURIComponent(d.mac); };
+    tr.onclick = () => { location.href = withToken('/device/' + encodeURIComponent(d.mac)); };
     tb.appendChild(tr);
   }
   if (!state.showAll && rows.length > TABLE_LIMIT) {
@@ -333,7 +345,7 @@ function renderStatusBanner(rogues) {
 }
 async function rogueAction(mac, endpoint, body) {
   try {
-    await fetch(endpoint, {
+    await fetch(withToken(endpoint), {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body || {}),
     });
@@ -363,7 +375,7 @@ function renderRogue(rogues) {
       <td data-label="dist" class="num">${fmtDist(r.distance)}</td>
       <td data-label="seen" class="num">${fmtAgo(r.device_last_seen || r.ts)}</td>
       <td data-label="" class="rogue-actions">
-        <a class="rogue-btn" href="/device/${encodeURIComponent(r.mac)}">Investigate</a>
+        <a class="rogue-btn" href="${withToken('/device/' + encodeURIComponent(r.mac))}">Investigate</a>
         <button class="rogue-btn known" data-mac="${r.mac}">Mark known</button>
         <button class="rogue-btn dismiss" data-mac="${r.mac}">Dismiss</button>
       </td>
@@ -377,11 +389,11 @@ function renderRogue(rogues) {
   }
   // click the device name → device details page (like the main table)
   tb.querySelectorAll('td.rogue-name').forEach(td =>
-    td.onclick = () => { location.href = '/device/' + encodeURIComponent(td.dataset.mac); });
+    td.onclick = () => { location.href = withToken('/device/' + encodeURIComponent(td.dataset.mac)); });
   // make the whole rogue row clickable (except the actions cell)
   tb.querySelectorAll('tr').forEach(tr => {
     if (tr.querySelector('.rogue-actions')) return;  // don't make the actions row clickable
-    tr.onclick = () => { const name = tr.querySelector('.rogue-name'); if (name) location.href = '/device/' + encodeURIComponent(name.dataset.mac); };
+    tr.onclick = () => { const name = tr.querySelector('.rogue-name'); if (name) location.href = withToken('/device/' + encodeURIComponent(name.dataset.mac)); };
   });
   tb.querySelectorAll('button.known').forEach(b => b.onclick = () =>
     rogueAction(b.dataset.mac, '/api/rogue/known', {mac: b.dataset.mac}));
@@ -436,7 +448,7 @@ async function refresh() {
 // ---------- wire up ----------
 document.getElementById('filter').oninput = e => { state.filter = e.target.value; renderTable(); };
 document.getElementById('btn-refresh').onclick = () => { refresh(); resetTimer(); };
-document.getElementById('btn-export').onclick = () => { window.location = '/api/now?format=csv'; };
+document.getElementById('btn-export').onclick = () => { window.location = withToken('/api/now?format=csv'); };
 document.querySelectorAll('#filter-chips .chip').forEach(chip => chip.onclick = () => {
   document.querySelectorAll('#filter-chips .chip').forEach(c => c.classList.remove('active'));
   chip.classList.add('active');
@@ -487,13 +499,13 @@ function startStream() {
   // the stale since= from construction, so the server re-seeds to current MAX
   // and sightings that arrived during the disconnect gap are lost. Rebuild
   // with the live lastSightingId so the server replays from where we left off.
-  let es = new EventSource('/stream?since=' + lastSightingId);
+  let es = new EventSource(withToken('/stream?since=' + lastSightingId));
   es.onmessage = onmsg;
   function onerror() {
     es.close();
     // Backoff so a server returning 500 doesn't trigger a tight reconnect loop.
     setTimeout(() => {
-      es = new EventSource('/stream?since=' + lastSightingId);
+      es = new EventSource(withToken('/stream?since=' + lastSightingId));
       es.onmessage = onmsg;
       es.onerror = onerror;
     }, 3000);

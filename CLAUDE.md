@@ -106,6 +106,25 @@ restarts the web + collector services, and reclassifies all devices.
 - `neighborhood-rhythm-web.service` — gunicorn dashboard (port 8000)
 - `neighborhood-rhythm-collector.timer` — scans every 5 min
 - `neighborhood-rhythm-update.timer` — checks GitHub for new releases every 5 min
+- `cloudflared.service` — Cloudflare tunnel (exposes port 8000 at rhythm.srdkn.com)
+
+## Public access (Cloudflare tunnel + token auth)
+The dashboard is publicly reachable at `https://rhythm.srdkn.com/?t=<API_TOKEN>`
+via a Cloudflare tunnel (no port forwarding, no exposed IP). Setup:
+`bash scripts/setup_cloudflare_tunnel.sh` (uses a Cloudflare API token at
+`~/.cloudflared_token` — not `cloudflared tunnel login`, which doesn't save the
+cert on a headless Pi). The tunnel token is at `~/.cloudflared/tunnel_token`.
+- **API auth**: when `RHYTHM_API_TOKEN` env is set on the web service, all
+  `/api/*` + `/stream` routes require a token. Accept `Authorization: Bearer
+  <token>` (integrations) or `?token=<token>` (browser — EventSource and
+  navigations can't set headers). The dashboard URL carries `?t=<token>`, which
+  app.js/device.js stash in localStorage and append to every call.
+- **Prereq**: the `srdkn.com` zone must be **active** in Cloudflare (not
+  `pending`). If it's pending, switch nameservers at GoDaddy from
+  `ns13/14.domaincontrol.com` to Cloudflare's (`emily/pete.ns.cloudflare.com`).
+  Until then the edge returns 403 for the zone.
+- The API token on the Pi is in the web service's `Environment=RHYTHM_API_TOKEN`
+  line. The dashboard URL with token is the "hidden URL".
 
 ## Gotchas (read these — they've bitten us)
 - **File ownership after update**: the update script runs as root and `git reset`

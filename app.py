@@ -12,20 +12,26 @@ from position import compute_position
 app = Flask(__name__)
 
 
-# Auth: when API_TOKEN is set, all /api/* routes require Authorization: Bearer
-# <token>. Fail closed (401) on mismatch or when the token env is set but the
-# header is missing. When unset (dev), auth is off. The dashboard HTML routes
-# (/, /device/<mac>) stay open — the browser has no token; the API is for
-# integrations. Constant-time compare to avoid timing leaks.
+# Auth: when API_TOKEN is set, all /api/* routes + /stream require a token.
+# Accept Authorization: Bearer <token> (integrations) or ?token=<token>
+# (browser — the dashboard URL carries it, since EventSource and navigations
+# can't set headers). Fail closed (401) on mismatch or missing token. When
+# unset (dev), auth is off. Dashboard HTML routes (/, /device) stay open.
+# Constant-time compare to avoid timing leaks.
 import hmac
+def _check_token():
+    tok = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+    if not tok:
+        tok = request.args.get('token', '').strip()
+    return hmac.compare_digest(tok, API_TOKEN) if API_TOKEN else True
+
 @app.before_request
 def _api_auth():
     if not API_TOKEN:
         return  # dev mode — no token set, auth off
-    if not request.path.startswith('/api/'):
+    if request.path not in ('/stream',) and not request.path.startswith('/api/'):
         return  # dashboard HTML routes stay open
-    tok = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
-    if not hmac.compare_digest(tok, API_TOKEN):
+    if not _check_token():
         return jsonify({"error": "unauthorized"}), 401
 
 
