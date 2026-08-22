@@ -47,8 +47,11 @@ const TIME_PATTERN_LABELS = {
 const timePatternLabel = p => TIME_PATTERN_LABELS[p] || p;
 
 function sparkline(canvas, values) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 600, H = 80;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
   const ctx = canvas.getContext('2d');
-  const W = canvas.width = canvas.offsetWidth || 600, H = canvas.height = 80;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
   if (values.length < 2) return;
   const min = Math.min(...values), max = Math.max(...values);
@@ -216,19 +219,22 @@ async function load() {
     if (tp && tp.hours) {
       const hc = document.getElementById('time-histogram');
       if (hc) {
+        const dpr = window.devicePixelRatio || 1;
+        const W = hc.offsetWidth || 600, H = 80;
+        hc.width = Math.round(W * dpr); hc.height = Math.round(H * dpr);
         const ctx = hc.getContext('2d');
-        const W = hc.width = hc.offsetWidth || 600, H = hc.height = 80;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, W, H);
         const max = Math.max(1, ...Object.values(tp.hours));
         const bw = W / 24;
         for (let h = 0; h < 24; h++) {
           const v = tp.hours[h] || 0;
-          const bh = (v / max) * (H - 16);
+          const bh = (v / max) * (H - 18);
           ctx.fillStyle = (tp.peak_hour === h) ? '#58a6ff' : '#30363d';
-          ctx.fillRect(h * bw + 1, H - bh, bw - 2, bh);
+          ctx.fillRect(h * bw + 1, H - bh - 2, bw - 2, bh);
         }
-        ctx.fillStyle = '#8b949e'; ctx.font = '9px monospace';
-        ctx.fillText('0', 2, H - 1); ctx.fillText('12', W/2 - 6, H - 1); ctx.fillText('23', W - 16, H - 1);
+        ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace';
+        ctx.fillText('0', 2, H - 1); ctx.fillText('12', W/2 - 6, H - 1); ctx.fillText('23', W - 18, H - 1);
       }
     }
 

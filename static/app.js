@@ -96,12 +96,24 @@ function pickBands(maxDist) {
 }
 
 // ---------- charts: 24h rhythm, device-type donut, signal histogram ----------
-function drawRhythmChart(rhythm) {
-  const c = document.getElementById('rhythm-chart');
-  if (!c) return;
+// Size a canvas to its CSS box × devicePixelRatio so it's crisp on Retina.
+// Returns {ctx, W, H} in CSS pixels — draw in CSS coords, the scale handles DPI.
+function setupCanvas(id) {
+  const c = document.getElementById(id);
+  if (!c) return null;
+  const dpr = window.devicePixelRatio || 1;
+  const W = c.offsetWidth || 360, H = c.offsetHeight || 200;
+  c.width = Math.round(W * dpr);
+  c.height = Math.round(H * dpr);
   const ctx = c.getContext('2d');
-  const W = c.width = c.offsetWidth || 360, H = c.height;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  return { ctx, W, H };
+}
+function drawRhythmChart(rhythm) {
+  const cv = setupCanvas('rhythm-chart');
+  if (!cv) return;
+  const { ctx, W, H } = cv;
   if (!rhythm) return;
   // cap the y-axis at the 95th percentile so one outlier bar doesn't dwarf the rest
   const sorted = [...rhythm].sort((a, b) => a - b);
@@ -113,16 +125,14 @@ function drawRhythmChart(rhythm) {
     ctx.fillStyle = '#58a6ff';
     ctx.fillRect(h * bw + 1, H - bh - 14, bw - 2, bh);
   }
-  ctx.fillStyle = '#8b949e'; ctx.font = '9px monospace';
+  ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace';
   ctx.fillText('0', 2, H - 2); ctx.fillText('12', W/2 - 6, H - 2); ctx.fillText('23', W - 16, H - 2);
 }
 
 function drawTypeDonut(typeCounts) {
-  const c = document.getElementById('type-chart');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width = c.offsetWidth || 360, H = c.height;
-  ctx.clearRect(0, 0, W, H);
+  const cv = setupCanvas('type-chart');
+  if (!cv) return;
+  const { ctx, W, H } = cv;
   if (!typeCounts) return;
   const entries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((s, [, n]) => s + n, 0) || 1;
@@ -153,11 +163,9 @@ function drawTypeDonut(typeCounts) {
 }
 
 function drawRssiHistogram(rssiBuckets) {
-  const c = document.getElementById('rssi-chart');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width = c.offsetWidth || 360, H = c.height;
-  ctx.clearRect(0, 0, W, H);
+  const cv = setupCanvas('rssi-chart');
+  if (!cv) return;
+  const { ctx, W, H } = cv;
   if (!rssiBuckets) return;
   const keys = ['near', 'mid', 'far', 'very far'];
   const labels = ['≥-60 dBm', '-60 to -70', '-70 to -80', '<-80 dBm'];
@@ -168,9 +176,10 @@ function drawRssiHistogram(rssiBuckets) {
     const v = rssiBuckets[keys[i]] || 0;
     const bh = (v / max) * (H - 24);
     ctx.fillStyle = colors[i];
-    ctx.fillRect(i * bw + 4, H - bh - 16, bw - 8, bh);
-    ctx.fillStyle = '#8b949e'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(v, i * bw + bw/2, H - bh - 20);
+    ctx.fillRect(i * bw + 4, H - bh - 18, bw - 8, bh);
+    ctx.fillStyle = '#8b949e'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(v, i * bw + bw/2, H - bh - 22);
+    ctx.font = '10px monospace';
     ctx.fillText(labels[i], i * bw + bw/2, H - 4);
   }
   ctx.textAlign = 'start';
