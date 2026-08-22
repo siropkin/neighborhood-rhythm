@@ -147,12 +147,13 @@ function drawRssiHistogram(rssiBuckets) {
   const W = c.width = c.offsetWidth || 360, H = c.height;
   ctx.clearRect(0, 0, W, H);
   if (!rssiBuckets) return;
+  const keys = ['near', 'mid', 'far', 'very far'];
   const labels = ['≥-60 dBm', '-60 to -70', '-70 to -80', '<-80 dBm'];
   const colors = ['#3fb950', '#58a6ff', '#d29922', '#f85149'];
-  const max = Math.max(1, ...labels.map(l => rssiBuckets[l] || 0));
+  const max = Math.max(1, ...keys.map(k => rssiBuckets[k] || 0));
   const bw = W / 4;
   for (let i = 0; i < 4; i++) {
-    const v = rssiBuckets[labels[i]] || 0;
+    const v = rssiBuckets[keys[i]] || 0;
     const bh = (v / max) * (H - 24);
     ctx.fillStyle = colors[i];
     ctx.fillRect(i * bw + 4, H - bh - 16, bw - 8, bh);
