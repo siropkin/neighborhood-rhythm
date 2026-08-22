@@ -172,24 +172,21 @@ function drawRssiHistogram(rssiBuckets) {
   const { ctx, W, H } = cv;
   if (!rssiBuckets) return;
   const keys = ['near', 'mid', 'far', 'very far'];
-  // distance is the primary label (what the user asks for), dBm secondary
-  const distLabels = ['~1m', '~4m', '~8m', '15m+'];
-  const dBmLabels = ['≥-60', '-60 to -70', '-70 to -80', '<-80 dBm'];
+  // one-line label: distance (primary) + dBm range (secondary, in brackets)
+  const labels = ['~1m (≥-60 dBm)', '~4m (-60 to -70)', '~8m (-70 to -80)', '15m+ (<-80 dBm)'];
   // single-hue sequential ramp (dark=near, light=far) — no "closer=better" judgment
   const colors = ['#1f6feb', '#388bfd', '#58a6ff', '#8b949e'];
   const max = Math.max(1, ...keys.map(k => rssiBuckets[k] || 0));
   const bw = W / 4;
   for (let i = 0; i < 4; i++) {
     const v = rssiBuckets[keys[i]] || 0;
-    const bh = (v / max) * (H - 40);   // reserve space for two-line label
+    const bh = (v / max) * (H - 30);   // reserve space for the count + one-line label
     ctx.fillStyle = colors[i];
     ctx.fillRect(i * bw + 4, H - bh - 18, bw - 8, bh);
     ctx.fillStyle = '#8b949e'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
     ctx.fillText(v, i * bw + bw/2, Math.max(12, H - bh - 22));
-    ctx.font = 'bold 11px monospace';
-    ctx.fillText(distLabels[i], i * bw + bw/2, H - 16);
-    ctx.font = '9px monospace'; ctx.fillStyle = 'var(--muted)';
-    ctx.fillText(dBmLabels[i], i * bw + bw/2, H - 4);
+    ctx.font = '10px monospace';
+    ctx.fillText(labels[i], i * bw + bw/2, H - 4);
   }
   ctx.textAlign = 'start';
 }
