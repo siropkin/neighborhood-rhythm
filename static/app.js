@@ -110,6 +110,15 @@ function setupCanvas(id) {
   ctx.clearRect(0, 0, W, H);
   return { ctx, W, H };
 }
+// resolve a CSS variable to its computed hex/rgb value — canvas ignores 'var(--x)'
+const _cssCache = {};
+function cssVar(name) {
+  if (_cssCache[name]) return _cssCache[name];
+  const v = getComputedStyle(document.body).getPropertyValue(name).trim();
+  _cssCache[name] = v || '#8b949e';
+  return _cssCache[name];
+}
+function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 function drawRhythmChart(rhythm) {
   const cv = setupCanvas('rhythm-chart');
   if (!cv) return;
@@ -117,18 +126,47 @@ function drawRhythmChart(rhythm) {
   if (!rhythm) return;
   // show the real peak — no 95th-percentile cap. If one hour is 10x the rest,
   // that's the signal (the building's pulse), not noise to hide.
-  const max = Math.max(1, Math.max(...rhythm) * 1.1);
-  const bw = W / 24;
-  for (let h = 0; h < 24; h++) {
-    const bh = Math.min((rhythm[h] / max) * (H - 20), H - 20);
-    ctx.fillStyle = '#58a6ff';
-    ctx.fillRect(h * bw + 1, H - bh - 14, bw - 2, bh);
+  const peakVal = Math.max(...rhythm);
+  const max = Math.max(1, peakVal * 1.1);
+  const padL = 28, padR = 4, padB = 16, padT = 8;
+  const plotW = W - padL - padR, plotH = H - padB - padT;
+  // y-axis ticks + gridlines
+  const yTicks = 4;
+  ctx.strokeStyle = cssVar('--border'); ctx.fillStyle = cssVar('--muted');
+  ctx.lineWidth = 1; ctx.font = '10px monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= yTicks; i++) {
+    const v = Math.round((max / yTicks) * i);
+    const y = padT + plotH - (v / max) * plotH;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.globalAlpha = i === 0 ? 1 : 0.4; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillText(v, padL - 4, y);
   }
-  ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace';
-  ctx.fillText('0', 2, H - 2); ctx.fillText('6', W/4 - 4, H - 2);
-  ctx.fillText('12', W/2 - 6, H - 2); ctx.fillText('18', 3*W/4 - 6, H - 2); ctx.fillText('23', W - 16, H - 2);
+  // bars
+  const bw = plotW / 24;
+  const peakHour = rhythm.indexOf(peakVal);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  for (let h = 0; h < 24; h++) {
+    const bh = (rhythm[h] / max) * plotH;
+    ctx.fillStyle = h === peakHour ? cssVar('--gold') : '#58a6ff';
+    ctx.fillRect(padL + h * bw + 1, padT + plotH - bh, bw - 2, bh);
+    // label the peak bar with its count
+    if (h === peakHour && peakVal > 0) {
+      ctx.fillStyle = cssVar('--text'); ctx.font = 'bold 10px monospace';
+      ctx.fillText(peakVal, padL + h * bw + bw / 2, padT + plotH - bh - 2);
+      ctx.font = '10px monospace';
+    }
+  }
+  // x-axis hour labels
+  ctx.fillStyle = cssVar('--muted'); ctx.font = '10px monospace';
+  ctx.fillText('0', padL + 0 * bw + bw / 2, H - 2);
+  ctx.fillText('6', padL + 6 * bw + bw / 2, H - 2);
+  ctx.fillText('12', padL + 12 * bw + bw / 2, H - 2);
+  ctx.fillText('18', padL + 18 * bw + bw / 2, H - 2);
+  ctx.fillText('23', padL + 23 * bw + bw / 2, H - 2);
+  ctx.textAlign = 'start';
 }
 
+// colorblind-safe categorical palette (Okabe-Ito derived), assigned in fixed order
+const TYPE_PALETTE = ['#0072b2', '#e69f00', '#009e73', '#cc79a5', '#56b4e9', '#d55e00', '#f0c674', '#999999', '#a020f0', '#228b22', '#ff1493', '#4169e1'];
 function drawTypeDonut(typeCounts) {
   const cv = setupCanvas('type-chart');
   if (!cv) return;
@@ -136,33 +174,33 @@ function drawTypeDonut(typeCounts) {
   if (!typeCounts) return;
   const entries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((s, [, n]) => s + n, 0) || 1;
-  const cx = W/2, cy = H/2, r = Math.min(cx, cy) - 10;
-  let start = -Math.PI / 2;
-  for (const [t, n] of entries) {
-    const angle = (n / total) * 2 * Math.PI;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, r, start, start + angle);
-    ctx.closePath();
-    ctx.fillStyle = colorForType(t);
-    ctx.fill();
-    start += angle;
-  }
-  // hole
-  ctx.fillStyle = 'var(--surface)';
-  ctx.beginPath(); ctx.arc(cx, cy, r * 0.6, 0, 2*Math.PI); ctx.fill();
-  ctx.fillStyle = 'var(--text)'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
-  ctx.fillText(entries.length + ' types', cx, cy);
-  ctx.font = '11px monospace'; ctx.fillStyle = 'var(--muted)';
-  ctx.fillText(total + ' devices', cx, cy + 16);
-  ctx.textAlign = 'start';
-  // color-coded legend with count + percentage
+  const max = Math.max(1, ...entries.map(([, n]) => n));
+  // horizontal bar chart — better than a donut for many small categories
+  const padL = 4, padR = 40, rowH = Math.min(22, (H - 4) / entries.length), gap = 3;
+  const labelW = Math.min(110, W * 0.4);
+  const barX = padL + labelW + 6;
+  const barW = W - barX - padR;
+  ctx.textBaseline = 'middle'; ctx.font = '12px sans-serif';
+  entries.forEach(([t, n], i) => {
+    const y = 2 + i * rowH;
+    const color = TYPE_PALETTE[i % TYPE_PALETTE.length];
+    ctx.fillStyle = cssVar('--text'); ctx.textAlign = 'left';
+    ctx.fillText(truncate(typeLabel(t), 18), padL, y + rowH / 2);
+    ctx.fillStyle = color;
+    ctx.fillRect(barX, y + gap / 2, (n / max) * barW, rowH - gap);
+    ctx.fillStyle = cssVar('--muted'); ctx.textAlign = 'right';
+    ctx.fillText(n + ' (' + Math.round(n / total * 100) + '%)', W - padR + 32, y + rowH / 2);
+  });
+  ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  // legend below the chart (accessible text list)
   const legend = document.getElementById('type-legend');
   if (legend) {
-    legend.innerHTML = entries.map(([t, n]) => {
-      const pct = Math.round(n / total * 100);
-      return `<span><i style="background:${colorForType(t)}"></i>${typeLabel(t)} ${n} (${pct}%)</span>`;
-    }).join('');
+    legend.innerHTML = '<span class="legend-head">' + entries.length + ' types, ' + total + ' devices</span>' +
+      entries.map(([t, n], i) => {
+        const pct = Math.round(n / total * 100);
+        const color = TYPE_PALETTE[i % TYPE_PALETTE.length];
+        return `<span><i style="background:${color}"></i>${typeLabel(t)}<span class="legend-count">${n} (${pct}%)</span></span>`;
+      }).join('');
   }
 }
 
@@ -172,21 +210,40 @@ function drawRssiHistogram(rssiBuckets) {
   const { ctx, W, H } = cv;
   if (!rssiBuckets) return;
   const keys = ['near', 'mid', 'far', 'very far'];
-  // one-line label: distance (primary) + dBm range (secondary, in brackets)
-  const labels = ['~1m (≥-60)', '~4m (-60 to -70)', '~8m (-70 to -80)', '15m+ (<-80)'];
+  // distance label (primary) + dBm range (secondary); shortened on narrow canvases
+  const fullLabels = ['~1m (≥-60)', '~4m (-60 to -70)', '~8m (-70 to -80)', '15m+ (<-80)'];
+  const shortLabels = ['~1m', '~4m', '~8m', '15m+'];
+  const labels = W < 320 ? shortLabels : fullLabels;
   // single-hue sequential ramp (dark=near, light=far) — no "closer=better" judgment
   const colors = ['#1f6feb', '#388bfd', '#58a6ff', '#8b949e'];
   const max = Math.max(1, ...keys.map(k => rssiBuckets[k] || 0));
-  const bw = W / 4;
+  const padL = 24, padR = 4, padB = 24, padT = 8;
+  const plotW = W - padL - padR, plotH = H - padB - padT;
+  // y-axis ticks
+  const yTicks = 3;
+  ctx.strokeStyle = cssVar('--border'); ctx.fillStyle = cssVar('--muted');
+  ctx.lineWidth = 1; ctx.font = '10px monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= yTicks; i++) {
+    const v = Math.round((max / yTicks) * i);
+    const y = padT + plotH - (v / max) * plotH;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.globalAlpha = i === 0 ? 1 : 0.4; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillText(v, padL - 4, y);
+  }
+  const bw = plotW / 4;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   for (let i = 0; i < 4; i++) {
     const v = rssiBuckets[keys[i]] || 0;
-    const bh = (v / max) * (H - 30);   // reserve space for the count + one-line label
+    const bh = (v / max) * plotH;
+    const x = padL + i * bw;
     ctx.fillStyle = colors[i];
-    ctx.fillRect(i * bw + 4, H - bh - 18, bw - 8, bh);
-    ctx.fillStyle = '#8b949e'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(v, i * bw + bw/2, Math.max(12, H - bh - 22));
-    ctx.font = (W < 200 ? '8px' : '10px') + ' monospace';
-    ctx.fillText(labels[i], i * bw + bw/2, H - 4);
+    ctx.fillRect(x + 4, padT + plotH - bh, bw - 8, bh);
+    // count label inside top of bar (or above if bar too short)
+    ctx.fillStyle = bh > 18 ? cssVar('--surface') : cssVar('--muted');
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText(v, x + bw / 2, bh > 18 ? padT + plotH - bh + 13 : padT + plotH - bh - 3);
+    // x-axis label
+    ctx.fillStyle = cssVar('--muted'); ctx.font = (W < 200 ? '8px' : '10px') + ' monospace';
+    ctx.fillText(labels[i], x + bw / 2, H - 4);
   }
   ctx.textAlign = 'start';
 }
@@ -328,7 +385,7 @@ function renderTable() {
       <td data-label="dist" class="num">${fmtDist(d.distance)}</td>
       <td data-label="rssi" class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>
       <td data-label="seen" class="num">${fmtAgo(d.last_seen)}</td>
-      <td data-label="mine" class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}" role="button" aria-label="${d.is_mine ? 'tagged as mine' : 'mark as mine'}" aria-pressed="${d.is_mine}">${d.is_mine ? '★' : '☆'}</span></td>
+      <td data-label="mine" class="num" title="tap to tag a device as yours"><span class="mine-mark ${d.is_mine ? '' : 'off'}" data-mac="${d.mac}" role="button" aria-label="${d.is_mine ? 'tagged as mine' : 'mark as mine'}" aria-pressed="${d.is_mine}">${d.is_mine ? '★' : '☆'}</span></td>
       <td data-label="" class="rogue-actions">${isRogue ? `<button class="rogue-btn known" data-mac="${d.mac}">Mark known</button><button class="rogue-btn dismiss" data-mac="${d.mac}">Dismiss</button>` : ''}</td>`;
     tr.onclick = () => { location.href = withToken('/device/' + encodeURIComponent(d.mac)); };
     tb.appendChild(tr);
@@ -349,9 +406,17 @@ function renderTable() {
     else
       rogueAction(b.dataset.mac, `/api/rogue/${encodeURIComponent(b.dataset.mac)}/resolve`, {});
   });
-  // mark sorted header
+  // mine star: tapping it opens the device page (where the "mark as mine" button
+  // lives) — stopPropagation so the row click fires once, not twice.
+  tb.querySelectorAll('.mine-mark').forEach(m => m.onclick = (e) => {
+    e.stopPropagation();
+    location.href = withToken('/device/' + encodeURIComponent(m.dataset.mac));
+  });
+  // mark sorted header + direction
   document.querySelectorAll('th').forEach(th => {
-    th.classList.toggle('sorted', th.dataset.sort === state.sortKey);
+    const isSorted = th.dataset.sort === state.sortKey;
+    th.classList.toggle('sorted', isSorted);
+    th.classList.toggle('asc', isSorted && state.sortDir === 1);
   });
 }
 
@@ -366,14 +431,15 @@ function renderStatusBanner(rogues) {
   } else {
     el.hidden = false;
     el.className = 'status-banner warn';
-    el.innerHTML = `${rogues.length} unrecognized device${rogues.length>1?'s':''} to review — <a href="#" id="review-rogues">review them</a> (filter the table to "new" below)`;
-    const link = document.getElementById('review-rogues');
-    if (link) link.onclick = (e) => {
-      e.preventDefault();
+    el.innerHTML = `${rogues.length} unrecognized device${rogues.length>1?'s':''} to review — <a href="#" id="review-rogues">review them</a>`;
+    const reviewRogues = () => {
       const chip = document.querySelector('.chip[data-filter="rogue"]');
       if (chip) chip.click();
       document.getElementById('device-table').scrollIntoView({ behavior: 'smooth' });
     };
+    const link = document.getElementById('review-rogues');
+    if (link) link.onclick = (e) => { e.preventDefault(); reviewRogues(); };
+    el.onclick = (e) => { if (e.target !== link) reviewRogues(); };
   }
 }
 async function rogueAction(mac, endpoint, body) {
@@ -419,6 +485,7 @@ async function refresh() {
     state.devices = now.devices;
     state.positions = positions.positions;
     state.rogueMacs = new Set((rogues.rogues || []).map(r => r.mac));
+    state._lastStats = stats;
     drawRhythmChart(stats.rhythm);
     // device types: split mine vs unknown from the active device list so the
     // gold slice shows your devices, not just the raw type distribution
@@ -514,6 +581,24 @@ function startStream() {
 refresh();
 resetTimer();
 startStream();
+// re-render charts on resize so canvas content reflows to the CSS box
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => {
+    if (state.devices) {
+      const sc = state._lastStats || {};
+      drawRhythmChart(sc.rhythm);
+      drawRssiHistogram(sc.rssi_buckets);
+      const typeCounts = {};
+      for (const d of state.devices) {
+        const t = d.is_mine ? 'mine' : (d.last_type || 'unknown');
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+      }
+      drawTypeDonut(typeCounts);
+    }
+  }, 150);
+});
 // ---------- site selector (multi-tenant) ----------
 (async () => {
   try {
@@ -544,4 +629,6 @@ if (firstrun && !localStorage.getItem('nr-firstrun-dismissed')) {
     firstrun.hidden = true;
     localStorage.setItem('nr-firstrun-dismissed', '1');
   };
+  const glossaryLink = document.getElementById('firstrun-glossary');
+  if (glossaryLink) glossaryLink.onclick = (e) => { e.preventDefault(); if (helpModal) helpModal.hidden = false; };
 }

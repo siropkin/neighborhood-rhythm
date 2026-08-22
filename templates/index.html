@@ -32,38 +32,45 @@
   <section class="firstrun" id="firstrun" hidden>
     <b>Getting started</b>
     <ol>
-      <li>Your scanner is running — devices appear in the table below as they are detected.</li>
-      <li>Review <b>Unrecognized devices</b> — mark the ones you recognize as known, dismiss drive-bys.</li>
-      <li>Click any device for its signal history, behavior, and linked aliases.</li>
+      <li>Your scanner runs every 5 minutes. Devices appear in the table below within a few minutes of being detected — phones and rotating-MAC devices may take longer.</li>
+      <li>If the status banner above shows <b>unrecognized devices</b> (new, stable devices not in your baseline), click <b>review them</b> to filter the table to those devices, then <b>Mark known</b> for ones you recognize or <b>Dismiss</b> drive-bys (devices that passed through once and left). See the <a href="#" id="firstrun-glossary">glossary</a> for what these terms mean.</li>
+      <li>Click any device row for its signal history, behavior, and linked aliases.</li>
     </ol>
     <button class="firstrun-dismiss" id="firstrun-dismiss">got it</button>
   </section>
 
   <section class="kpi-row">
-    <div class="kpi-tile" title="Stable: seen 3+ times (real devices). Random: seen <3 times (rotating phones, drive-bys).">
-      <span class="kpi-val"><b id="s-stable">0</b> stable · <b id="s-random">0</b> random</span>
-      <label>devices by stability</label>
+    <div class="kpi-tile" title="Stable = real devices (seen 3+ times). Random = seen <3 times (rotating phones, drive-bys).">
+      <span class="kpi-val">
+        <span class="kpi-line"><b id="s-stable">0</b><span>Stable devices</span></span>
+        <span class="kpi-line"><b id="s-random">0</b><span>Random devices</span></span>
+      </span>
+      <label>real devices vs random</label>
     </div>
     <div class="kpi-tile" title="A device seen on two sources counts in each.">
-      <span class="kpi-val"><b id="s-src-ble">0</b> BLE · <b id="s-src-wifi">0</b> WiFi · <b id="s-src-mdns">0</b> mDNS</span>
-      <label>active devices by signal source</label>
+      <span class="kpi-val">
+        <span class="kpi-line"><b id="s-src-ble">0</b><span>BLE devices</span></span>
+        <span class="kpi-line"><b id="s-src-wifi">0</b><span>WiFi devices</span></span>
+        <span class="kpi-line"><b id="s-src-mdns">0</b><span>mDNS devices</span></span>
+      </span>
+      <label>active by signal source</label>
     </div>
   </section>
 
   <div class="charts-row-wrap">
     <section class="chart-panel">
       <div class="panel-head"><h2>Devices detected each hour</h2></div>
-      <canvas id="rhythm-chart" width="360" height="200"></canvas>
+      <canvas id="rhythm-chart" width="360" height="200" role="img" aria-label="Bar chart of unique devices detected per hour over the last 24 hours"></canvas>
       <span class="d-hint">unique devices per hour (last 24h) — a device seen multiple times in the same hour counts once</span>
     </section>
     <section class="chart-panel">
       <div class="panel-head"><h2>Device types seen</h2></div>
-      <canvas id="type-chart" width="360" height="200"></canvas>
+      <canvas id="type-chart" width="360" height="200" role="img" aria-label="Horizontal bar chart of device types by count"></canvas>
       <div class="legend" id="type-legend"></div>
     </section>
     <section class="chart-panel">
       <div class="panel-head"><h2>How close are the devices?</h2></div>
-      <canvas id="rssi-chart" width="360" height="200"></canvas>
+      <canvas id="rssi-chart" width="360" height="200" role="img" aria-label="Bar chart of device count by signal strength distance bucket"></canvas>
       <span class="d-hint">Bluetooth/WiFi signal strength → estimated distance. Distances are rough (±50%). Walls and interference affect range.</span>
     </section>
   </div>
@@ -86,7 +93,7 @@
     </div>
     <div class="filter-chips" id="filter-chips">
       <span class="chip active" data-filter="all">all</span>
-      <span class="chip" data-filter="rogue">new</span>
+      <span class="chip" data-filter="rogue" title="Unrecognized: stable devices not in your known baseline">unrecognized</span>
       <span class="chip" data-filter="known">known</span>
       <span class="chip" data-filter="iot">iot</span>
       <span class="chip" data-filter="apple-device">apple</span>
@@ -101,7 +108,7 @@
           <tr>
             <th data-sort="last_type">type</th>
             <th data-sort="label">device</th>
-            <th class="num" title="how many MACs/keys are linked to this one physical device">id</th>
+            <th class="num" data-sort="alias_count" title="how many MACs/keys are linked to this one physical device">aliases</th>
             <th data-sort="distance" class="num">dist</th>
             <th data-sort="rssi" class="num">rssi</th>
             <th data-sort="last_seen" class="num">last seen</th>

@@ -51,9 +51,22 @@ h2 {
 .brand { font-weight: 700; font-size: 15px; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; }
 .header-right { display: flex; align-items: center; gap: 12px; }
 @media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; gap: 8px; }
-  .header-right { gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .topbar { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 16px; }
+  .brand { width: 100%; }
+  .header-right { width: 100%; justify-content: space-between; gap: 8px; flex-wrap: nowrap; }
+  .site-select { max-width: 140px; }
   .last-scan { display: none; }  /* the countdown on the button is enough on mobile */
+  .brand-tag { display: none; }
+  /* KPI tiles: tighter padding, 12px labels on mobile */
+  .kpi-tile { padding: 10px 12px; }
+  .kpi-tile label { font-size: 12px; }
+  /* stats row: 3+2 grid so it wraps evenly */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stats-row .stat { min-width: 0; }
+  /* filter chips: 44px tap targets on mobile */
+  .chip { font-size: 13px; padding: 8px 14px; min-height: 44px; display: inline-flex; align-items: center; }
+  /* firstrun dismiss: full-width 44px target */
+  .firstrun-dismiss { width: 100%; padding: 10px 20px; min-height: 44px; font-size: 13px; }
 }
 /* stats row — first row of page content (moved out of the header) */
 .stats-row {
@@ -73,7 +86,10 @@ h2 {
   background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
   padding: 12px 16px; display: flex; flex-direction: column; gap: 4px;
 }
-.kpi-tile .kpi-val { font-size: 20px; font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.kpi-tile .kpi-val { font-size: 20px; font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, monospace; display: flex; flex-direction: column; gap: 2px; }
+.kpi-tile .kpi-val .kpi-line { display: flex; justify-content: space-between; gap: 8px; }
+.kpi-tile .kpi-val .kpi-line b { font-weight: 600; }
+.kpi-tile .kpi-val .kpi-line span { color: var(--muted); font-size: 12px; text-transform: none; letter-spacing: 0; }
 .kpi-tile label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 
 /* layout — stats row, then radar+breakdown row, then table */
@@ -115,9 +131,19 @@ section { background: var(--surface); border: 1px solid var(--border); border-ra
   #device-table tr { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
   #device-table td { display: flex; justify-content: space-between; padding: 4px 0; border: none; }
   #device-table td::before { content: attr(data-label); color: var(--muted); font-size: 11px; text-transform: uppercase; }
-  #device-table td.dev-name { font-weight: 600; }
+  #device-table td.dev-name { font-weight: 600; max-width: 100%; }
+  #device-table td.dev-name b { max-width: 100%; }
   #device-table td.dev-name::before { content: ''; }
+  /* hide the empty last td (rogue actions slot) when there are no actions */
+  #device-table td[data-label=''] { display: none; }
+  /* rogue action buttons: full-width stacked, 44px tap targets */
+  #device-table td.rogue-actions { display: flex; flex-direction: column; gap: 8px; }
+  #device-table td.rogue-actions .rogue-btn { width: 100%; padding: 10px 16px; font-size: 13px; min-height: 44px; }
+  /* mine star: 44px tap target in card mode */
+  #device-table td[data-label='mine'] { min-height: 44px; align-items: center; }
+  #device-table .mine-mark { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; }
   .show-all-row td::before { content: ''; }
+  .show-all-row td { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; font-size: 13px; padding: 12px; }
 }
 
 /* panel heads */
@@ -154,9 +180,11 @@ section { background: var(--surface); border: 1px solid var(--border); border-ra
 
 /* radar — legend aligned to the chart (in the panel head, right side) */
 .radar-panel canvas { display: block; margin: 8px auto 0; max-width: 320px; height: auto; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11px; color: var(--muted); justify-content: center; margin-top: 16px; }
-.legend span { display: inline-flex; align-items: center; gap: 5px; }
-.legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.legend { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text); margin-top: 16px; }
+.legend span { display: flex; align-items: center; gap: 8px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+.legend .legend-count { color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.legend .legend-head { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
 
 /* type breakdown — its own panel, outside the radar layout */
 .breakdown-panel { min-width: 240px; }
@@ -184,6 +212,8 @@ th {
 }
 th.num { text-align: right; }
 th.sorted { color: var(--accent); }
+th.sorted::after { content: ' ▾'; font-size: 10px; }
+th.sorted.asc::after { content: ' ▴'; }
 tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; }
 tbody tr:hover { background: var(--surface-2); }
 td { padding: 8px 10px; white-space: nowrap; }
@@ -198,8 +228,9 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
 }
 .type-chip.mine { background: var(--gold); color: #1a1a1a; border-color: var(--gold); }
-.mine-mark { color: var(--gold); font-size: 16px; }
-.mine-mark.off { color: var(--border); }
+.mine-mark { color: var(--gold); font-size: 16px; cursor: pointer; }
+.mine-mark.off { color: var(--muted); }
+.mine-mark:hover { color: var(--gold); }
 
 /* device card */
 .card {
@@ -245,7 +276,7 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 
 /* ---- rogue actions (inline in the device table) ---- */
 .rogue-actions { display: flex; gap: 6px; justify-content: flex-end; }
-.rogue-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.rogue-btn { font-size: 12px; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .rogue-btn:hover { border-color: var(--accent); }
 .rogue-btn.known:hover { border-color: #2ea043; color: #2ea043; }
 .rogue-btn.dismiss:hover { border-color: #f85149; color: #f85149; }
@@ -254,7 +285,7 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 
 /* filter chips */
 .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-.chip { font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); cursor: pointer; user-select: none; }
+.chip { font-size: 12px; padding: 6px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); cursor: pointer; user-select: none; }
 .chip:hover { border-color: var(--accent); color: var(--text); }
 .chip.active { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
 /* radar caption */
@@ -264,7 +295,6 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 
 /* brand tag + help */
 .brand-tag { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 8px; }
-@media (max-width: 720px) { .brand-tag { display: none; } }
 .btn-help { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); width: 26px; height: 26px; font-size: 14px; cursor: pointer; padding: 0; }
 .btn-help:hover { border-color: var(--accent); color: var(--text); }
 /* first-run banner */
@@ -272,7 +302,7 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .firstrun b { color: var(--accent); }
 .firstrun ol { margin: 8px 0 10px 18px; padding: 0; color: var(--text); font-size: 13px; }
 .firstrun li { margin: 3px 0; }
-.firstrun-dismiss { font-size: 12px; padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.firstrun-dismiss { font-size: 13px; padding: 10px 20px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .firstrun-dismiss:hover { border-color: var(--accent); }
 /* alias link badge in device table */
 .alias-link { color: var(--accent); font-family: var(--mono); }
@@ -288,6 +318,9 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 
 /* status banner (all clear / review) */
 .status-banner { border-radius: 10px; padding: 12px 18px; margin-bottom: 18px; font-size: 14px; font-weight: 500; }
+.status-banner.warn { cursor: pointer; }
+.status-banner.warn a { color: inherit; text-decoration: underline; font-weight: 600; }
+@media (max-width: 720px) { .status-banner.warn { display: flex; align-items: center; min-height: 44px; } }
 .status-banner.ok { background: rgba(63,185,80,.12); border: 1px solid var(--low); color: var(--low); }
 .status-banner.warn { background: rgba(248,81,73,.12); border: 1px solid var(--high); color: var(--high); }
 /* export button */
@@ -296,7 +329,7 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 
 /* design audit: figure-ground + sticky header + rogue accent */
 .dev-name b { color: var(--text); }  /* device name (uses theme text color, not a hardcoded light gray) */
-.dev-mac { color: #8a8a8a; }     /* dim the MAC */
+.dev-mac { color: var(--muted); }     /* dim the MAC (theme-aware) */
 #device-table thead { position: sticky; top: 0; background: var(--surface); z-index: 2; }
 .rogue-row { box-shadow: inset 3px 0 0 var(--high); }
 .show-all-row td { text-align: center; color: var(--accent); cursor: pointer; font-size: 12px; padding: 8px; }
@@ -317,4 +350,4 @@ button:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }
 .charts-row-wrap { display: flex; gap: 20px; flex-wrap: wrap; }
 .chart-panel { flex: 1 1 300px; min-width: 280px; }
 .chart-panel canvas { display: block; width: 100%; max-width: 100%; height: 200px; }
-#type-chart { height: auto; aspect-ratio: 1 / 1; max-width: 220px; margin: 0 auto; }
+#type-chart { height: 320px; }
