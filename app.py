@@ -496,7 +496,7 @@ def api_stats():
         # stable devices: seen 3+ times in the last 24h (consistent presence, not a drive-by)
         stable = conn.execute(
             "SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3 AND last_seen >= ?",
-            (now - 86400)).fetchone()["c"]
+            (int(now - 86400),)).fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
         # chart data: 24h activity rhythm (unique devices per hour, last 24h).
         # sightings_hourly dedups per (hour, mac, sensor, source) — one phone awake
