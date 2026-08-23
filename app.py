@@ -490,9 +490,10 @@ def api_stats():
         n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors").fetchone()["c"]
         # dedup'd device count (fingerprints merge rotated MACs + cross-radio)
         n_fp = conn.execute("SELECT COUNT(*) c FROM device_fingerprints").fetchone()["c"]
-        # "real" devices: seen 3+ times (not a drive-by). The headline total
-        # counts every MAC ever seen; this is the stable-device count.
-        real = conn.execute("SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3").fetchone()["c"]
+        # "real" devices: seen 3+ times in the last 24h (consistent presence, not a drive-by)
+        real = conn.execute(
+            "SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3 AND last_seen >= ?",
+            (int(now - 86400),)).fetchone()["c"]
         # stable devices: seen 3+ times in the last 24h (consistent presence, not a drive-by)
         stable = conn.execute(
             "SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3 AND last_seen >= ?",
