@@ -476,8 +476,8 @@ async function refresh() {
     document.getElementById('s-sensors').textContent = stats.sensors;
     document.getElementById('s-scan').textContent = fmtAgo(stats.last_scan);
     // KPI tiles: stable vs random + source breakdown
-    document.getElementById('s-stable').textContent = stats.real;
-    document.getElementById('s-random').textContent = stats.total - stats.real;
+    document.getElementById('s-stable').textContent = stats.stable;
+    document.getElementById('s-random').textContent = stats.total - stats.stable;
     const sc = stats.source_counts || {};
     document.getElementById('s-src-ble').textContent = sc.ble || 0;
     document.getElementById('s-src-wifi').textContent = sc.wifi || 0;
