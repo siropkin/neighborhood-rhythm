@@ -508,7 +508,7 @@ def api_stats():
             "SELECT hour, COUNT(DISTINCT mac) c FROM sightings_hourly "
             "WHERE hour >= ? GROUP BY hour",
             (int((now - 86400) // 3600),)).fetchall():
-            rhythm[time.localtime(r["hour"] * 3600).tm_hour] += r["c"]
+            rhythm[r["hour"]] += r["c"]
         # device-type distribution (active now)
         type_counts = collections.Counter()
         for r in conn.execute("SELECT last_type FROM devices WHERE last_seen >= ?", (current_cutoff,)).fetchall():
