@@ -528,7 +528,7 @@ def api_stats():
             if src in ("ble", "bt"): source_counts["ble"] += r["c"]
             elif src in ("wifi", "mdns"): source_counts[src] = r["c"]
     return jsonify({
-        "current": current, "total": total, "real": real,
+        "current": current, "total": total, "real": real, "stable": stable,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
         "last_scan": last, "source_counts": source_counts,
         "rhythm": rhythm, "type_counts": dict(type_counts), "rssi_buckets": rssi_buckets,
