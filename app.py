@@ -493,8 +493,10 @@ def api_stats():
         # "real" devices: seen 3+ times (not a drive-by). The headline total
         # counts every MAC ever seen; this is the stable-device count.
         real = conn.execute("SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3").fetchone()["c"]
-        # stable devices: seen 2+ times (the KPI tile threshold — "multiple times")
-        stable = conn.execute("SELECT COUNT(*) c FROM devices WHERE sighting_count >= 2").fetchone()["c"]
+        # stable devices: seen 3+ times in the last 24h (consistent presence, not a drive-by)
+        stable = conn.execute(
+            "SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3 AND last_seen >= ?",
+            (now - 86400)).fetchone()["c"]
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
         # chart data: 24h activity rhythm (unique devices per hour, last 24h).
         # sightings_hourly dedups per (hour, mac, sensor, source) — one phone awake
