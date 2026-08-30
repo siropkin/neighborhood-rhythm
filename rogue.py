@@ -140,9 +140,15 @@ def mark_known(conn, mac, label=None, note=None):
 
 
 def resolve_rogue(conn, mac, note=None):
-    """Dismiss a rogue alert without adding to known (e.g. a one-off visitor)."""
+    """Dismiss a rogue alert. The MAC joins the known baseline (without the
+    is_mine tag — a neighbor's device isn't yours) so the dismissal STICKS:
+    previously a dismissed-but-still-present device re-flagged on the next scan."""
     conn.execute("UPDATE rogue_events SET resolved=1, note=? WHERE mac=? AND resolved=0",
                  (note, mac))
+    conn.execute(
+        "INSERT INTO known_devices(mac, label, added_ts, note) VALUES(?,?,?,?) "
+        "ON CONFLICT(mac) DO NOTHING",
+        (mac, None, time.time(), note or "dismissed"))
 
 
 if __name__ == "__main__":

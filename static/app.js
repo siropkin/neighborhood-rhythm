@@ -317,6 +317,21 @@ function renderTable() {
     tr.onclick = () => { state.showAll = true; renderTable(); };
     tb.appendChild(tr);
   }
+  // rogue review: bulk dismiss for the long tail of neighbor gear (per-row
+  // buttons stay for devices you actually recognize)
+  if (state.chipFilter === 'rogue' && rows.length > 1) {
+    const tr = document.createElement('tr');
+    tr.className = 'show-all-row';
+    tr.innerHTML = `<td colspan="8">dismiss all ${rows.length} shown — none of these are mine</td>`;
+    tr.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Dismiss all ${rows.length} shown devices? They join the known baseline (not tagged as mine) and won't alert again.`)) return;
+      for (const d of rows)
+        await fetch(withToken(`/api/rogue/${encodeURIComponent(d.mac)}/resolve`), { method: 'POST' });
+      refresh();
+    };
+    tb.appendChild(tr);
+  }
   // wire up rogue action buttons (Mark known / Dismiss) in the device table
   // stopPropagation so the row click (→ device page) doesn't fire on button clicks
   tb.querySelectorAll('button.rogue-btn').forEach(b => b.onclick = (e) => {
