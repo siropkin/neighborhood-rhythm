@@ -28,7 +28,9 @@ echo "new release: $LATEST (was ${CURRENT:-none}) — updating..."
 cd "$APP_DIR"
 # repo owned by siropkin but this runs as root — safe.directory + chown back.
 git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
-git fetch --tags origin
+# --force: a re-tagged release (tag moved upstream) must not fail the fetch —
+# with set -e, one "would clobber existing tag" rejection used to kill updates.
+git fetch --tags --force origin
 git reset --hard "$LATEST"
 git checkout "$LATEST"
 chown -R siropkin:siropkin "$APP_DIR"
