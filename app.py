@@ -531,9 +531,12 @@ def api_stats():
         # browser's (ours was America/New_York serving a PDT viewer).
         tzoff = _int_arg("tzoff", 0)
         cutoff_hour = int((now - 86400) // 3600) * 3600
+        # count physical devices (fingerprint), not MACs — a phone rotating
+        # through 3 MACs in an hour is one device, not three
         for r in conn.execute(
-            "SELECT hour, COUNT(DISTINCT mac) c FROM sightings_hourly "
-            "WHERE hour > ? GROUP BY hour",
+            "SELECT h.hour, COUNT(DISTINCT COALESCE(d.fingerprint_id, h.mac)) c "
+            "FROM sightings_hourly h JOIN devices d ON d.mac = h.mac "
+            "WHERE h.hour > ? GROUP BY h.hour",
             (cutoff_hour,)).fetchall():
             local_h = int(((r["hour"] - tzoff * 60) % 86400) // 3600)
             rhythm[local_h] += r["c"]

@@ -103,6 +103,19 @@ def test_rogue_min_sightings():
     assert MIN_SIGHTINGS >= 5  # drive-by tail guard
 
 
+def test_mac_normalization():
+    assert db._norm_mac("28:56:5a:a1:5b:89") == "28:56:5A:A1:5B:89"
+    assert db._norm_mac("4C:B9:EA:FA:F7:5B") == "4C:B9:EA:FA:F7:5B"
+    assert db._norm_mac("mdns:printer.local") == "mdns:printer.local"  # pseudo-key untouched
+    # migration uppercases historical rows
+    conn = _mk_conn()
+    with conn:
+        conn.execute("INSERT INTO devices (mac, first_seen, last_seen) VALUES ('28:56:5a:a1:5b:89', 1, 2)")
+    db.init_db()  # runs the migration
+    assert conn.execute("SELECT COUNT(*) c FROM devices WHERE mac != UPPER(mac)").fetchone()["c"] == 0
+    conn.close()
+
+
 def test_smoothed_rssi_tukey():
     conn = _mk_conn()
     now = time.time()

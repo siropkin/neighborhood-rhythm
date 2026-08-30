@@ -170,9 +170,29 @@ def init_db():
         scols = {r[1] for r in conn.execute("PRAGMA table_info(sensors)")}
         if "site_id" not in scols:
             conn.execute("ALTER TABLE sensors ADD COLUMN site_id TEXT")
+        # one-time: uppercase historical MACs (early ARP/mDNS/probe paths stored
+        # lowercase). OR IGNORE survives any dual-case collision; the LIMIT-1
+        # probe makes it a no-op after the first run.
+        if conn.execute("SELECT 1 FROM devices WHERE mac != UPPER(mac) LIMIT 1").fetchone():
+            for t in ("devices", "sightings", "sightings_hourly",
+                      "rogue_events", "known_devices", "device_aliases"):
+                conn.execute(
+                    f"UPDATE OR IGNORE {t} SET mac = UPPER(mac) "
+                    "WHERE mac != UPPER(mac) AND mac NOT LIKE 'mdns:%'")
+
+
+def _norm_mac(mac):
+    """Canonical MAC case: uppercase. BLE (bleak) reports uppercase but ARP /
+    mDNS / wifi_probe paths handed us lowercase — a device seen via two radios
+    would split into two rows and cross-radio fingerprint joins miss.
+    mDNS pseudo-keys (mdns:hostname) are not MACs — leave them alone."""
+    if mac and not mac.startswith("mdns:"):
+        return mac.upper()
+    return mac
 
 
 def upsert_device(conn, mac, oui_name, ts, dev_type, label, site_id=None):
+    mac = _norm_mac(mac)
     conn.execute(
         """INSERT INTO devices(mac, oui_name, first_seen, last_seen, last_type, last_label, sighting_count, site_id)
            VALUES(?,?,?,?,?,?,1,NULLIF(?, ''))
@@ -191,6 +211,7 @@ def insert_sighting(conn, mac, sensor_id, ts, rssi, distance, name, services, so
                      tx_power=None, extra=None):
     # Dedup guard: bleak can double-callback the same device within a scan.
     # Same mac + sensor within DEDUP_WINDOW_S is one sighting, not two.
+    mac = _norm_mac(mac)
     import json
     extra_json = json.dumps(extra) if extra else None
     conn.execute(
