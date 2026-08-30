@@ -94,6 +94,13 @@ def api_now():
         # alias count per device (how many MACs/keys are linked to this one
         # physical device by the fingerprinter) — the standout feature.
         for d in devices:
+            # distance from spike-filtered RSSI (Tukey fence) — a single
+            # sighting's distance jumps ±50% scan-to-scan
+            sr = db.smoothed_rssi(conn, d["mac"])
+            if sr is not None:
+                from position import _distance_from_rssi, _tx_default
+                ref = d["tx_power"] if d.get("tx_power") is not None else _tx_default(d.get("last_type"))
+                d["distance"] = _distance_from_rssi(sr, ref)
             if d.get("fingerprint_id"):
                 n = conn.execute(
                     "SELECT COUNT(*) c FROM device_aliases WHERE fingerprint_id=?",

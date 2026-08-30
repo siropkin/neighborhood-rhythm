@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS rogue_events (
 );
 CREATE INDEX IF NOT EXISTS idx_rogue_mac ON rogue_events(mac);
 CREATE INDEX IF NOT EXISTS idx_rogue_unresolved ON rogue_events(resolved);
+-- /api/stats filters devices by last_seen several times per call (43k+ rows)
+CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);
 """
 
 
@@ -284,7 +286,11 @@ def latest_sighting_per_device(conn, cutoff_ts):
 
 
 def smoothed_rssi(conn, mac, window=11):
-    """Rolling-median RSSI over the last `window` readings — cuts per-sample distance noise."""
+    """Smoothed RSSI over the last `window` readings: Tukey IQR fence (drop
+    spikes outside [Q1-1.5·IQR, Q3+1.5·IQR]), then mean of survivors.
+    Better spike rejection than a plain median at our sample rates
+    (ESPresense's AdaptivePercentileRSSI uses the same fence)."""
+    import statistics
     rows = conn.execute(
         "SELECT rssi FROM sightings WHERE mac=? AND rssi IS NOT NULL ORDER BY ts DESC LIMIT ?",
         (mac, window),
@@ -292,7 +298,13 @@ def smoothed_rssi(conn, mac, window=11):
     if not rows:
         return None
     vals = sorted(r["rssi"] for r in rows)
-    return vals[len(vals) // 2]
+    if len(vals) < 4:
+        return float(vals[len(vals) // 2])
+    q = statistics.quantiles(vals, n=4)
+    q1, q3 = q[0], q[2]
+    iqr = q3 - q1
+    fenced = [v for v in vals if q1 - 1.5 * iqr <= v <= q3 + 1.5 * iqr]
+    return sum(fenced) / len(fenced) if fenced else float(vals[len(vals) // 2])
 
 
 if __name__ == "__main__":

@@ -7,6 +7,19 @@ import time
 import db
 
 
+# Per-class TX power defaults (dBm @ 1m) when the device doesn't advertise tx.
+_TX_DEFAULTS = {
+    "phone": -65, "phone-anon": -65, "wearable": -75, "beacon": -59,
+    "light": -59, "iot": -59, "iot-esp32": -59, "sensor": -59,
+    "tv": -55, "speaker": -55, "laptop": -65, "computer": -65,
+    "apple-device": -65, "samsung-device": -65, "vacuum": -59,
+}
+
+
+def _tx_default(dev_type):
+    return _TX_DEFAULTS.get(dev_type, -59)
+
+
 def _distance_from_rssi(rssi, ref_rssi=-59, n=2.7):
     """d = 10^((ref - rssi)/(10n)). Sign matters: (ref - rssi), not (rssi - ref),
     or distance shrinks as signal weakens (the bug that put everything at <1m)."""
@@ -89,10 +102,10 @@ def compute_position(mac, at_time=None, tolerance_s=60):
             return None
         if n == 1:
             sid, x, y, d = sensors_with_xy[0]
-            # Single sensor: smoothed (rolling-median) distance over the one-shot sighting.
+            # Single sensor: spike-filtered (Tukey-fence) distance over the one-shot sighting.
             sr = db.smoothed_rssi(conn, mac)
             if sr is not None and latest:
-                ref = latest[0]["tx_power"] if latest[0]["tx_power"] is not None else -59
+                ref = latest[0]["tx_power"] if latest[0]["tx_power"] is not None else _tx_default(None)
                 d = _distance_from_rssi(sr, ref)
             return {"type": "ring", "sensor": sid, "distance": round(d, 2), "error": None}
         if n == 2:

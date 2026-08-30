@@ -103,6 +103,23 @@ def test_rogue_min_sightings():
     assert MIN_SIGHTINGS >= 5  # drive-by tail guard
 
 
+def test_smoothed_rssi_tukey():
+    conn = _mk_conn()
+    now = time.time()
+    mac = "3C:BB:CC:DD:EE:05"
+    # steady ~-70 with two spikes (-95, -40): fence drops them, mean ≈ -70
+    vals = [-70, -71, -69, -70, -72, -68, -70, -71, -95, -40]
+    with conn:
+        for i, v in enumerate(vals):
+            conn.execute(
+                "INSERT INTO sightings (mac, sensor_id, ts, rssi, source) VALUES (?,?,?,?,?)",
+                (mac, "t", now - (len(vals) - i) * 60, v, "ble"))
+    s = db.smoothed_rssi(conn, mac)
+    assert -71.5 <= s <= -69.0, s
+    assert db.smoothed_rssi(conn, "00:00:00:00:00:00") is None
+    conn.close()
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

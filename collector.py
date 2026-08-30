@@ -10,7 +10,7 @@ import db
 import oui
 from classify import classify
 from config import SENSOR_ID, RETENTION_DAYS, BLE_RSSI_FLOOR, SITE_ID
-from position import _distance_from_rssi
+from position import _distance_from_rssi, _tx_default
 from rules import is_random_mac, HAP_CATEGORY
 from enrich import enrich
 
@@ -19,17 +19,7 @@ def _now():
     return time.time()
 
 
-# Per-class TX power defaults (dBm @ 1m) when the device doesn't advertise tx.
-_TX_DEFAULTS = {
-    "phone": -65, "phone-anon": -65, "wearable": -75, "beacon": -59,
-    "light": -59, "iot": -59, "iot-esp32": -59, "sensor": -59,
-    "tv": -55, "speaker": -55, "laptop": -65, "computer": -65,
-    "apple-device": -65, "samsung-device": -65, "vacuum": -59,
-}
-
-
-def _tx_default(dev_type):
-    return _TX_DEFAULTS.get(dev_type, -59)
+# Per-class TX power defaults live in position.py (single source of truth).
 
 
 # --- BLE via bleak ---
