@@ -142,9 +142,11 @@ def api_device(mac):
     from behavior import classify_behavior, detect_time_pattern
     with db.get_db() as conn:
         dev = conn.execute("SELECT * FROM devices WHERE mac=?", (mac,)).fetchone()
+        # latest 500 sightings, chronological — the page shows the last 30 and
+        # a sparkline; unbounded history grows forever (14d × 5-min scans)
         sightings = conn.execute(
-            "SELECT * FROM sightings WHERE mac=? ORDER BY ts", (mac,)
-        ).fetchall()
+            "SELECT * FROM (SELECT * FROM sightings WHERE mac=? ORDER BY ts DESC LIMIT 500) ORDER BY ts",
+            (mac,)).fetchall()
         behavior = classify_behavior(conn, mac) if dev else None
         time_pattern = detect_time_pattern(conn, mac) if dev else None
         # the fingerprint cluster: this device's fingerprint_id + all aliases
@@ -490,25 +492,35 @@ def api_stats():
         n_sensors = conn.execute("SELECT COUNT(*) c FROM sensors").fetchone()["c"]
         # dedup'd device count (fingerprints merge rotated MACs + cross-radio)
         n_fp = conn.execute("SELECT COUNT(*) c FROM device_fingerprints").fetchone()["c"]
-        # "real" devices: seen 3+ times in the last 24h (consistent presence, not a drive-by)
-        real = conn.execute(
-            "SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3 AND last_seen >= ?",
-            (int(now - 86400),)).fetchone()["c"]
         # stable devices: seen 3+ times in the last 24h (consistent presence, not a drive-by)
         stable = conn.execute(
             "SELECT COUNT(*) c FROM devices WHERE sighting_count >= 3 AND last_seen >= ?",
             (int(now - 86400),)).fetchone()["c"]
+        # random = the rest of the last-24h window (rotating phones, drive-bys).
+        # Same window as stable — subtracting a 24h count from all-time `total`
+        # mixes windows and inflates the noise number.
+        active_24h = conn.execute(
+            "SELECT COUNT(*) c FROM devices WHERE last_seen >= ?",
+            (int(now - 86400),)).fetchone()["c"]
+        random = active_24h - stable
         last = conn.execute("SELECT MAX(ts) m FROM sightings").fetchone()["m"]
         # chart data: 24h activity rhythm (unique devices per hour, last 24h).
         # sightings_hourly dedups per (hour, mac, sensor, source) — one phone awake
         # 3h = 3 rows, not 180. A device seen multiple times in the same hour counts once.
         import collections
         rhythm = [0] * 24
+        # hour column is epoch SECONDS (db.py) — cutoff must be too. Strict >
+        # gives exactly 24 buckets. Bucket in the VIEWER's tz (?tzoff= minutes
+        # behind UTC, JS getTimezoneOffset) — the Pi's own tz may not match the
+        # browser's (ours was America/New_York serving a PDT viewer).
+        tzoff = _int_arg("tzoff", 0)
+        cutoff_hour = int((now - 86400) // 3600) * 3600
         for r in conn.execute(
             "SELECT hour, COUNT(DISTINCT mac) c FROM sightings_hourly "
-            "WHERE hour >= ? GROUP BY hour",
-            (int((now - 86400) // 3600),)).fetchall():
-            rhythm[r["hour"]] += r["c"]
+            "WHERE hour > ? GROUP BY hour",
+            (cutoff_hour,)).fetchall():
+            local_h = int(((r["hour"] - tzoff * 60) % 86400) // 3600)
+            rhythm[local_h] += r["c"]
         # device-type distribution (active now)
         type_counts = collections.Counter()
         for r in conn.execute("SELECT last_type FROM devices WHERE last_seen >= ?", (current_cutoff,)).fetchall():
@@ -531,7 +543,7 @@ def api_stats():
             if src in ("ble", "bt"): source_counts["ble"] += r["c"]
             elif src in ("wifi", "mdns"): source_counts[src] = r["c"]
     return jsonify({
-        "current": current, "total": total, "real": real, "stable": stable,
+        "current": current, "total": total, "stable": stable, "random": random,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
         "last_scan": last, "source_counts": source_counts,
         "rhythm": rhythm, "type_counts": dict(type_counts), "rssi_buckets": rssi_buckets,

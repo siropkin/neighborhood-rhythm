@@ -15,7 +15,7 @@
     <span class="brand-tag">ambient device awareness — every phone, speaker, and IoT device in your building, passively</span>
   </div>
   <div class="header-right">
-    <select id="site-select" class="site-select" title="filter by site/building"></select>
+    <select id="site-select" class="site-select" title="filter by site/building" hidden></select>
     <button class="btn-help" id="btn-help" title="what do these terms mean?">?</button>
     <span class="last-scan">last scan <b id="s-scan">—</b></span>
     <button class="btn-refresh" id="btn-refresh" title="refresh the dashboard now">
@@ -40,7 +40,7 @@
   </section>
 
   <section class="kpi-row">
-    <div class="kpi-tile" title="Stable = real devices (seen 3+ times). Random = seen <3 times (rotating phones, drive-bys).">
+    <div class="kpi-tile" title="Last 24h: Stable = seen 3+ times (consistent presence). Random = seen <3 times (rotating phones, drive-bys).">
       <span class="kpi-val">
         <span class="kpi-line"><b id="s-stable">0</b><span>Stable devices</span></span>
         <span class="kpi-line"><b id="s-random">0</b><span>Random devices</span></span>
@@ -66,6 +66,7 @@
     <section class="chart-panel">
       <div class="panel-head"><h2>Device types seen</h2></div>
       <canvas id="type-chart" width="360" height="200" role="img" aria-label="Horizontal bar chart of device types by count"></canvas>
+      <span class="d-hint">types among devices active right now</span>
       <div class="legend" id="type-legend"></div>
     </section>
     <section class="chart-panel">
@@ -76,7 +77,6 @@
   </div>
 
   <section class="stats-row" id="stats">
-    <span class="stat" title="Stable devices with a vendor or known type (seen 3+ times) — the honest inventory count"><b id="s-real">0</b><label>real devices</label></span>
     <span class="stat" title="Every MAC ever seen, including drive-bys and rotating phones"><b id="s-total">0</b><label>ever seen</label></span>
     <span class="stat" title="Devices seen in the last scan (active right now)"><b id="s-current">0</b><label>active now</label></span>
     <span class="stat" title="WiFi access points in range (neighbor routers, not your devices)"><b id="s-wifi">0</b><label>wifi networks</label></span>
@@ -92,15 +92,15 @@
       </div>
     </div>
     <div class="filter-chips" id="filter-chips">
-      <span class="chip active" data-filter="all">all</span>
-      <span class="chip" data-filter="rogue" title="Unrecognized: stable devices not in your known baseline">unrecognized</span>
-      <span class="chip" data-filter="known">known</span>
-      <span class="chip" data-filter="iot">iot</span>
-      <span class="chip" data-filter="apple-device">apple</span>
-      <span class="chip" data-filter="speaker">speakers</span>
-      <span class="chip" data-filter="sensor">sensors</span>
-      <span class="chip" data-filter="phone-anon">phones</span>
-      <span class="chip" data-filter="unknown">unknown</span>
+      <button type="button" class="chip active" data-filter="all">all</button>
+      <button type="button" class="chip" data-filter="rogue" title="Unrecognized: stable devices not in your known baseline">unrecognized</button>
+      <button type="button" class="chip" data-filter="known">known</button>
+      <button type="button" class="chip" data-filter="iot">iot</button>
+      <button type="button" class="chip" data-filter="apple-device">apple</button>
+      <button type="button" class="chip" data-filter="speaker">speakers</button>
+      <button type="button" class="chip" data-filter="sensor">sensors</button>
+      <button type="button" class="chip" data-filter="phone-anon">phones</button>
+      <button type="button" class="chip" data-filter="unknown">unknown</button>
     </div>
     <div class="table-wrap">
       <table id="device-table">
@@ -131,8 +131,8 @@
       <dt>BLE</dt><dd>Bluetooth Low Energy — the radio phones, speakers, and IoT devices advertise on.</dd>
       <dt>mDNS</dt><dd>A service a device broadcasts on your network (e.g. a printer announcing itself). No MAC, so we key by hostname.</dd>
       <dt>wifi_probe</dt><dd>A device looking for a WiFi network — captured by the monitor-mode adapter. Catches devices not on your network.</dd>
-      <dt>real devices</dt><dd>Stable devices with a vendor or known type, seen 3+ times. The honest inventory count (excludes drive-bys).</dd>
-      <dt>ever seen</dt><dd>Every MAC ever detected, including drive-bys and rotating phones. Always ≥ real devices.</dd>
+      <dt>stable devices</dt><dd>Devices seen 3+ times in the last 24h — consistent presence, not a drive-by. The honest inventory count.</dd>
+      <dt>ever seen</dt><dd>Every MAC ever detected, including drive-bys and rotating phones. Always ≥ stable devices.</dd>
       <dt>rogue / new device</dt><dd>A stable device that appeared and isn't in your known baseline. You decide if it belongs.</dd>
       <dt>id (aliases)</dt><dd>How many MACs/keys the fingerprinter linked to one physical device (e.g. a phone's rotated MACs, or a speaker's BLE + mDNS).</dd>
       <dt>behavior</dt><dd>always-on (fixed infrastructure), transient (a visitor), rotation (a phone's rotated MAC), mobile (moving).</dd>

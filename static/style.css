@@ -13,16 +13,20 @@
   --phone: #8b949e;
   --mine: #f0c674;
   --unknown: #484f58;
+  --low: #3fb950;    /* all-clear banner */
+  --high: #f85149;   /* warn banner + rogue row accent */
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --bg: #f6f8fa; --surface: #fff; --surface-2: #f0f3f6;
     --border: #d0d7de; --text: #1f2328; --muted: #57606a;
+    --low: #1a7f37; --high: #cf222e;
   }
 }
 :root[data-theme="light"] {
   --bg: #f6f8fa; --surface: #fff; --surface-2: #f0f3f6;
   --border: #d0d7de; --text: #1f2328; --muted: #57606a;
+  --low: #1a7f37; --high: #cf222e;
 }
 :root[data-theme="dark"] {
   --bg: #0d1117; --surface: #161b22; --surface-2: #1c232c;
@@ -57,6 +61,9 @@ h2 {
   .site-select { max-width: 140px; }
   .last-scan { display: none; }  /* the countdown on the button is enough on mobile */
   .brand-tag { display: none; }
+  /* 44px tap targets */
+  .btn-help { width: 44px; height: 44px; }
+  .btn-refresh { min-height: 44px; }
   /* KPI tiles: tighter padding, 12px labels on mobile */
   .kpi-tile { padding: 10px 12px; }
   .kpi-tile label { font-size: 12px; }
@@ -124,7 +131,8 @@ section { background: var(--surface); border: 1px solid var(--border); border-ra
   .radar-row-wrap > .radar-panel { flex: 1 1 100%; }
   /* narrow tables: hide the MAC + identity column so the row fits, let the rest scroll */
   .dev-mac { display: none; }
-  #device-table th[title*="linked"], #device-table td:has(.alias-link) { display: none; }
+  /* hide the aliases column by position — :has(.alias-link) misses '—' rows */
+  #device-table th:nth-child(3), #device-table td:nth-child(3) { display: none; }
   /* device table → stacked cards on mobile */
   #device-table thead { display: none; }
   #device-table, #device-table tbody, #device-table tr, #device-table td { display: block; width: 100%; }
@@ -285,7 +293,7 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 
 /* filter chips */
 .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-.chip { font-size: 12px; padding: 6px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); cursor: pointer; user-select: none; }
+.chip { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); cursor: pointer; user-select: none; }
 .chip:hover { border-color: var(--accent); color: var(--text); }
 .chip.active { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
 /* radar caption */

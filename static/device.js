@@ -8,7 +8,12 @@ const AUTH_TOKEN = (() => {
   return t;
 })();
 const withToken = url => AUTH_TOKEN ? url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(AUTH_TOKEN) : url;
-const MAC = decodeURIComponent(location.pathname.replace('/device/', ''));
+// escape attacker-controlled data (device names, mDNS hostnames) before innerHTML
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MAC = (() => {
+  try { return decodeURIComponent(location.pathname.split('/device/')[1] || ''); }
+  catch { return (location.pathname.split('/device/')[1] || ''); }  // malformed %xx — use raw
+})();
 const fmt = ts => ts ? new Date(ts*1000).toLocaleString() : '—';
 const fmtAgo = ts => {
   if (!ts) return '—';
@@ -93,14 +98,14 @@ async function load() {
 
     document.getElementById('d-content').innerHTML = `
       <div class="d-header">
-        <span class="type-chip${d.is_mine ? ' mine' : ''}">${d.last_type || '?'}</span>
-        <h2>${d.my_label || d.last_label || 'unnamed'}</h2>
+        <span class="type-chip${d.is_mine ? ' mine' : ''}">${esc(d.last_type || '?')}</span>
+        <h2>${esc(d.my_label || d.last_label || 'unnamed')}</h2>
       </div>
-      <div class="d-sub">${d.oui_name || (d.last_label || 'unknown manufacturer')} · ${d.mac}</div>
+      <div class="d-sub">${esc(d.oui_name || (d.last_label || 'unknown manufacturer'))} · ${esc(d.mac)}</div>
 
       <div class="d-actions">
         <button class="btn${d.is_mine ? ' mine' : ''}" id="d-tag">${d.is_mine ? '★ tagged mine — untag' : 'tag as mine'}</button>
-        <input id="d-tag-label" class="d-tag-input" placeholder="label (optional)" value="${d.my_label || ''}">
+        <input id="d-tag-label" class="d-tag-input" placeholder="label (optional)" value="${esc(d.my_label || '')}">
         <button class="btn${d.tracked ? ' tracked' : ''}" id="d-track">${d.tracked ? '◉ tracking — stop' : '◉ track this device'}</button>
       </div>
 
@@ -137,7 +142,7 @@ async function load() {
       ${fp && fp.aliases && fp.aliases.length > 1 ? `<div class="d-section">
         <h3>device fingerprint</h3>
         <span class="d-hint">${fp.aliases.length} identifiers linked as one device (cross-radio / rotation):</span>
-        <div class="d-names">${fp.aliases.map(a => `<div class="d-name">${a.mac} <span class="d-hint">· ${a.source} · ${a.link_method}</span></div>`).join('')}</div>
+        <div class="d-names">${fp.aliases.map(a => `<div class="d-name">${esc(a.mac)} <span class="d-hint">· ${esc(a.source)} · ${esc(a.link_method)}</span></div>`).join('')}</div>
       </div>` : ''}
 
       <div class="d-section">
@@ -146,7 +151,7 @@ async function load() {
         ${rssiSeries.length ? `<span class="d-hint">${rssiSeries.length} readings, ${Math.min(...rssiSeries).toFixed(0)} to ${Math.max(...rssiSeries).toFixed(0)} dBm</span>` : '<span class="d-hint">no signal data (mDNS device)</span>'}
       </div>
 
-      ${names.length ? `<div class="d-section"><h3>names advertised</h3><div class="d-names">${names.map(n => `<div class="d-name">${n}</div>`).join('')}</div></div>` : ''}
+      ${names.length ? `<div class="d-section"><h3>names advertised</h3><div class="d-names">${names.map(n => `<div class="d-name">${esc(n)}</div>`).join('')}</div></div>` : ''}
 
       ${(() => {
         // find the latest sighting with decoded enrichment (extra)
@@ -162,12 +167,12 @@ async function load() {
           if (a.battery != null) lines.push(`battery: ${a.battery}%`);
           if (a.device) lines.push(`type: ${a.device}`);
           if (a.types) lines.push(`continuity: ${a.types.join(', ')}`);
-          if (lines.length) parts.push(`<b>Apple</b>${lines.map(l => `<div class="d-name">${l}</div>`).join('')}`);
+          if (lines.length) parts.push(`<b>Apple</b>${lines.map(l => `<div class="d-name">${esc(l)}</div>`).join('')}`);
         }
         if (e.sensor) {
           const s = e.sensor;
           const lines = Object.entries(s).map(([k,v]) => `${k}: ${v}`);
-          parts.push(`<b>Sensor</b>${lines.map(l => `<div class="d-name">${l}</div>`).join('')}`);
+          parts.push(`<b>Sensor</b>${lines.map(l => `<div class="d-name">${esc(l)}</div>`).join('')}`);
         }
         return parts.length ? `<div class="d-section"><h3>decoded payload</h3><div class="d-names">${parts.join('')}</div></div>` : '';
       })()}
@@ -199,10 +204,10 @@ async function load() {
                 const n = g.length;
                 return `<tr>
                   <td>${n > 1 ? n + '× ' : ''}${fmt(s.ts)}</td>
-                  <td>${s.sensor_id}</td>
+                  <td>${esc(s.sensor_id)}</td>
                   <td class="num">${s.rssi != null ? s.rssi.toFixed(0) + ' dBm' : '—'}</td>
                   <td class="num">${s.distance != null && s.distance <= 50 ? s.distance.toFixed(1) + 'm' : '—'}</td>
-                  <td>${s.source}</td>
+                  <td>${esc(s.source)}</td>
                 </tr>`;
               }).join('');
             })()}
@@ -256,7 +261,7 @@ async function load() {
       load();
     };
   } catch (e) {
-    document.getElementById('d-content').innerHTML = `<p>error: ${e}</p>`;
+    document.getElementById('d-content').innerHTML = `<p>error: ${esc(e.message || e)}</p>`;
   } finally {
     btn.classList.remove('active');
   }

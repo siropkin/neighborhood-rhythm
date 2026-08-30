@@ -37,10 +37,12 @@ def classify(raw):
     # 4. Random MAC -> anonymous phone/tablet/laptop.
     # A LAN device (source=wifi, ARP scan) with a stable MAC is a real network
     # device even if its MAC is locally-administered (some printers/IoT use
-    # LA MACs). Don't mark source=wifi as phone-anon.
+    # LA MACs). But a no-name, no-OUI private MAC on the LAN is a phone using
+    # per-network private WiFi addressing — those DO get the phone-anon label.
     mac = raw.get("mac") or ""
     source = raw.get("source") or ""
-    if source != "wifi" and (raw.get("is_random") or (is_random_mac(mac) and not name)):
+    is_priv = raw.get("is_random") or (is_random_mac(mac) and not name)
+    if is_priv and (source != "wifi" or (not name and not oui)):
         return {"type": "phone-anon", "label": "anonymous mobile (privacy mode)", "confidence": 0.3}
 
     # 5. Fallback — use the mDNS model as the label if we have one.

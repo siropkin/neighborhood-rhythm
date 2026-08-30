@@ -12,7 +12,11 @@ def _distance_from_rssi(rssi, ref_rssi=-59, n=2.7):
     or distance shrinks as signal weakens (the bug that put everything at <1m)."""
     if rssi is None:
         return None
-    return 10 ** ((ref_rssi - rssi) / (10 * n))
+    # Advertised tx_power is often a lie — 113 devices claim +17 dBm, which put
+    # them at 6 km. Clamp the reference to the realistic BLE band and cap the
+    # result: past ~100 m the model is pure noise for BLE/WiFi in a building.
+    ref_rssi = min(ref_rssi, 8)
+    return min(10 ** ((ref_rssi - rssi) / (10 * n)), 100.0)
 
 
 def _latest_per_sensor(rows):

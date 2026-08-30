@@ -26,6 +26,7 @@ MIN_ALWAYS_ON_HOURS = 8    # seen in >= this many distinct hours = "all day"
                             # (8 not 12: a sensor deployed 9h ago can't hit 12 yet)
 MIN_SIGHTINGS_FOR_BEHAVIOR = 5  # below this, not enough data to classify
 TRANSIENT_MAX_SIGHTINGS = 20   # transient = short bounded presence
+TRANSIENT_MAX_SPAN_S = 6 * 3600   # a visitor stays hours, not days
 CYCLIC_SPIKE_RATIO = 1.5   # rate_max >= 1.5x rate_med AND rate_max >= 18 = cyclic
 CYCLIC_MIN_RATE = 18       # the spike must reach this many sightings/hour
 
@@ -75,7 +76,9 @@ def classify_behavior(conn, mac, now=None):
     # classify
     n = len(rows)
     is_random = is_random_mac(mac)
-    if n <= TRANSIENT_MAX_SIGHTINGS and active_hours <= 3:
+    # transient also needs a bounded span — 5 sightings spread over 9 days is
+    # a sporadic weak-signal device, not a visitor (dwell would read "9 days")
+    if n <= TRANSIENT_MAX_SIGHTINGS and active_hours <= 3 and span_s <= TRANSIENT_MAX_SPAN_S:
         # a short-lived random MAC is a rotation fragment (one of a phone's
         # rotated MACs), not a visitor. A short-lived stable MAC is a visitor.
         behavior = "rotation" if is_random else "transient"

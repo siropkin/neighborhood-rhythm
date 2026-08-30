@@ -115,4 +115,13 @@ def is_random_mac(mac):
         first = int(hexpart[0:2], 16)
     except ValueError:
         return False
-    return bool(first & 0b11)  # either LA bit = random
+    if first & 0b11:
+        return True  # either LA bit = random
+    # BLE static-random addresses set the TOP two bits of the first octet.
+    # Real OUIs live up there too (e.g. FC:B0:DE Cloud Network Tech), so only
+    # call it random when the OUI lookup misses. (~46% of our unknowns were
+    # these masquerading as stable.)
+    if (first & 0xC0) == 0xC0:
+        from oui import lookup  # lazy: avoids import-time OUI load
+        return lookup(mac) is None
+    return False
