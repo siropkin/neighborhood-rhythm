@@ -267,6 +267,7 @@ function renderTable() {
         mac: r.mac, last_type: r.device_class, last_label: r.label, my_label: null,
         oui_name: r.oui_name, alias_count: 1, distance: r.distance, rssi: r.rssi,
         last_seen: r.device_last_seen, is_mine: 0,
+        behavior: r.behavior && r.behavior.behavior,
       }))
     : state.devices.filter(d => {
       const cf = state.chipFilter;
@@ -299,7 +300,7 @@ function renderTable() {
     if (isRogue) tr.classList.add('rogue-row');
     tr.innerHTML = `
       <td data-label="type"><span class="type-chip${d.is_mine ? ' mine' : ''}" title="${esc(d.last_type || '')}">${esc(typeLabel(d.last_type || '?'))}</span></td>
-      <td data-label="device" class="dev-name"><b>${esc(d.my_label || d.last_label || '—')}</b> <span class="mono dev-mac">${esc(d.mac)}</span></td>
+      <td data-label="device" class="dev-name"><b>${esc(d.my_label || d.last_label || '—')}</b> <span class="mono dev-mac">${esc(d.mac)}</span>${d.behavior ? `<span class="rogue-behavior">${esc(behaviorLabel(d.behavior))}</span>` : ''}</td>
       <td data-label="id" class="num" title="${d.alias_count > 1 ? (d.alias_count + ' identifiers linked as one device') : 'single device'}">${d.alias_count > 1 ? '<b class="alias-link">' + d.alias_count + '↔</b>' : '—'}</td>
       <td data-label="dist" class="num">${fmtDist(d.distance)}</td>
       <td data-label="rssi" class="num">${d.rssi != null ? d.rssi.toFixed(0) : '—'}</td>

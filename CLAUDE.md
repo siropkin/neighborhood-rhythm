@@ -42,8 +42,11 @@ classifier. See README "Honest limits".
   Writes `device_fingerprints` + `device_aliases` tables. Idempotent; run after
   every scan.
 - `rogue.py` — **rogue-device detection**: flags new stable-MAC devices (not
-  random/rotating phones) seen 3+ times over ≥10 min (`MIN_SIGHTINGS=3`,
-  `MIN_SIGHTING_SPAN_S=600`) that aren't in the `known_devices` baseline.
+  random/rotating phones — `is_random_mac` covers LA bits AND BLE static-random
+  0xC0-with-no-OUI) seen 5+ times over ≥15 min (`MIN_SIGHTINGS=5`,
+  `MIN_SIGHTING_SPAN_S=900`) that aren't in the `known_devices` baseline.
+  `autoresolve_stale` (runs in the collector pass) auto-resolves open alerts
+  whose device hasn't been seen in 48h — they re-flag if the device returns.
   Inventory + diff, not a threat classifier — "something new is here", a human
   decides if it belongs. Misses by design: randomizing MACs, brief advertisers,
   asleep/off-cycle devices.
@@ -135,7 +138,14 @@ cert on a headless Pi). The tunnel token is at `~/.cloudflared/tunnel_token`.
   collector is scanning, you get "database is locked". Wait for the collector
   to finish, then run the migration.
 - **Inline Python over SSH**: avoid `ssh pi 'python -c "..."'` with embedded
-  quotes — they break. Write a script file, scp it, run it.
+  quotes — they break. Write a script file, scp it, run it. No `sqlite3` CLI
+  on the Pi — use `~/lightcontrol_venv/bin/python` with the sqlite3 module.
+- **Pi timezone vs viewers**: the Pi's tz may not match the browser's (it was
+  America/New_York serving a PDT user until 2026-08-29). Never label
+  user-facing hours with server `localtime()` — APIs take `?tzoff=` (minutes
+  behind UTC, JS `getTimezoneOffset()`) and bucket/label in the viewer's tz.
+- **Tests**: `python3 test_core.py` (framework-free, temp DB) — run after
+  touching rules.py / behavior.py / rogue.py / position.py. Runs on the Pi too.
 - **Flask dev server drops connections**: we use gunicorn (2 workers, 4 threads)
   because the Flask dev server is single-threaded and drops in-flight requests
   on restart. Don't switch back to `app.py` directly for production.
@@ -162,6 +172,16 @@ share an empty set. So MAC-rotation clustering (Pass C) needs guards or it
 over-merges: skip empty signatures, cap group cardinality (>4 = a population not
 a rotation), pairwise links only (no transitive chaining A→B→C→D). The empty-set
 phones stay un-merged — honest footfall noise, not linkable units.
+
+**Researched and rejected (2026-08, don't re-research):** McMatcher-style
+RSSI-shape matching (SAX + cosine, IEEE ICCE 2024) needs dense RSSI streams —
+useless at our 5-min scan cadence (~3 samples per MAC rotation); revisit if the
+probe-request adapter lands. BLE clock-skew fingerprinting dies on advDelay
+dither + BlueZ timestamp jitter. **IRK enrollment** (ESPresense-style: emulate a
+Heart Rate Monitor so household phones pair once, then resolve every rotated
+RPA passively via AES `ah(IRK, prand)`) is the ONLY technique that de-noises the
+empty-set phones — it's a pairing-flow feature, not a fix. Adopted from
+ESPresense instead: Tukey IQR-fence RSSI smoothing (`db.smoothed_rssi`).
 
 ## Rogue detection — the honest limits
 Counts devices, not people. MAC randomization means ~340 empty-set phones are
