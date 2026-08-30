@@ -405,10 +405,13 @@ def main():
         from fingerprint import fingerprint_all
         fingerprint_all(conn)
         # rogue-device detection: flag new stable-MAC devices not in baseline.
-        from rogue import detect_rogues
+        from rogue import detect_rogues, autoresolve_stale
         rogues = detect_rogues(conn)
         if rogues:
             print(f"  {len(rogues)} new rogue device(s)")
+        gone = autoresolve_stale(conn)
+        if gone:
+            print(f"  auto-resolved {gone} stale rogue alert(s)")
     _fix_db_perms()
     print(f"scanned {n_dev} devices, {n_ap} APs, stored (sensor={SENSOR_ID})")
 

@@ -120,18 +120,18 @@ def api_now():
 @app.route("/api/rhythm")
 def api_rhythm():
     hours = _int_arg("hours", 24)
+    tzoff = _int_arg("tzoff", 0)  # minutes behind UTC (JS getTimezoneOffset)
     since = time.time() - hours * 3600
     with db.get_db() as conn:
         rows = conn.execute(
             """SELECT mac, ts FROM sightings WHERE ts >= ? ORDER BY ts""", (since,)
         ).fetchall()
-    # bucket by hour. Key on the UTC epoch hour (stable, DST-proof) but
-    # label it in local time for display — avoids the DST fall-back collision
-    # where the same local "01:00" label occurs twice and merges two hours.
+    # bucket by hour. Key on the UTC epoch hour (stable, DST-proof) but label
+    # in the VIEWER's tz — the Pi's own tz may not be the browser's.
     buckets = {}
     for r in rows:
         hour = int(r["ts"] // 3600) * 3600
-        label = time.strftime("%Y-%m-%d %H:00", time.localtime(hour))
+        label = time.strftime("%Y-%m-%d %H:00", time.gmtime(hour - tzoff * 60))
         buckets.setdefault(hour, (set(), label))[0].add(r["mac"])
     series = [{"t": lbl, "count": len(macs)} for _, (macs, lbl) in sorted(buckets.items())]
     return jsonify({"hours": hours, "series": series})
@@ -158,11 +158,20 @@ def api_device(mac):
                 "SELECT mac, source, link_method FROM device_aliases WHERE fingerprint_id=?",
                 (fp_id,)).fetchall()
             fp = {"fingerprint_id": fp_id, "aliases": [dict(a) for a in aliases]}
+        # rogue/known status so the device page can close the review loop
+        # (investigate here → mark known / dismiss here, no round-trip)
+        rogue_ev = conn.execute(
+            "SELECT id, ts FROM rogue_events WHERE mac=? AND resolved=0",
+            (mac,)).fetchone()
+        is_known = conn.execute(
+            "SELECT 1 FROM known_devices WHERE mac=?", (mac,)).fetchone() is not None
     if not dev:
         return jsonify({"error": "not found"}), 404
     return jsonify({"device": dict(dev), "sightings": [dict(s) for s in sightings],
                     "behavior": behavior, "fingerprint": fp,
-                    "time_pattern": time_pattern})
+                    "time_pattern": time_pattern,
+                    "rogue": dict(rogue_ev) if rogue_ev else None,
+                    "is_known": is_known})
 
 
 @app.route("/api/wifi")

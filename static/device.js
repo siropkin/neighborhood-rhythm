@@ -109,6 +109,12 @@ async function load() {
         <button class="btn${d.tracked ? ' tracked' : ''}" id="d-track">${d.tracked ? '◉ tracking — stop' : '◉ track this device'}</button>
       </div>
 
+      ${data.rogue ? `<div class="status-banner warn" style="margin:12px 0">
+        ⚠ Unrecognized device — not in your known baseline.
+        <button class="rogue-btn known" id="d-known">Mark known</button>
+        <button class="rogue-btn dismiss" id="d-dismiss">Dismiss</button>
+      </div>` : (data.is_known ? `<div class="status-banner ok" style="margin:12px 0">✓ in your known baseline</div>` : '')}
+
       <div class="d-grid">
         <div class="d-stat"><b>${d.sighting_count}</b><label>sightings</label></div>
         <div class="d-stat"><b>${names.length}</b><label>names advertised</label></div>
@@ -258,6 +264,20 @@ async function load() {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ tracked: tracked ? 1 : 0 }),
       });
+      load();
+    };
+    // rogue review actions (rendered only when an open rogue event exists)
+    const post = (url, body) => fetch(withToken(url), {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+    });
+    const btnKnown = document.getElementById('d-known');
+    if (btnKnown) btnKnown.onclick = async () => {
+      await post('/api/rogue/known', { mac: MAC, label: document.getElementById('d-tag-label').value || undefined });
+      load();
+    };
+    const btnDismiss = document.getElementById('d-dismiss');
+    if (btnDismiss) btnDismiss.onclick = async () => {
+      await post('/api/rogue/' + encodeURIComponent(MAC) + '/resolve', {});
       load();
     };
   } catch (e) {

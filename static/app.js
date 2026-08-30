@@ -186,9 +186,18 @@ function drawTypeDonut(typeCounts) {
     ctx.fillStyle = cssVar('--text'); ctx.textAlign = 'left';
     ctx.fillText(truncate(typeLabel(t), 18), padL, y + rowH / 2);
     ctx.fillStyle = color;
-    ctx.fillRect(barX, y + gap / 2, (n / max) * barW, rowH - gap);
-    ctx.fillStyle = cssVar('--muted'); ctx.textAlign = 'right';
-    ctx.fillText(n + ' (' + Math.round(n / total * 100) + '%)', W - padR + 32, y + rowH / 2);
+    const w = (n / max) * barW;
+    ctx.fillRect(barX, y + gap / 2, w, rowH - gap);
+    // count label: inside long bars (near-black reads on every palette color),
+    // outside short ones — the old fixed-x label overlapped full-width bars
+    const label = n + ' (' + Math.round(n / total * 100) + '%)';
+    if (w > 70) {
+      ctx.fillStyle = '#0d1117'; ctx.textAlign = 'right';
+      ctx.fillText(label, barX + w - 5, y + rowH / 2);
+    } else {
+      ctx.fillStyle = cssVar('--muted'); ctx.textAlign = 'left';
+      ctx.fillText(label, barX + w + 5, y + rowH / 2);
+    }
   });
   ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   // legend below the chart (accessible text list)

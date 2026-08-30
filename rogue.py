@@ -25,8 +25,9 @@ from rules import is_random_mac
 # sightings span this many seconds. A device seen 3× in one 10-min scan burst
 # then never again is NOT consistent — it's a drive-by that happened to be
 # caught multiple times in one scan. The span requirement filters that out.
-MIN_SIGHTINGS = 3
+MIN_SIGHTINGS = 5   # ~25 min of presence at 5-min scans — 3 caught drive-by noise
 MIN_SIGHTING_SPAN_S = 900  # sightings must span >= 15 min (genuinely staying)
+AUTO_RESOLVE_AFTER_S = 48 * 3600  # a rogue that left 2 days ago isn't actionable
 
 
 def detect_rogues(conn, now=None):
@@ -111,6 +112,19 @@ def _fire_alert(mac, dev, ts):
     except Exception as e:
         import sys
         print(f"alert webhook failed: {e}", file=sys.stderr)
+
+
+def autoresolve_stale(conn, now=None):
+    """Auto-resolve open rogue events whose device hasn't been seen in 48h.
+    A drive-by that never came back isn't worth a human's review time; the
+    event stays in the table (resolved, noted) if it returns and re-flags."""
+    now = now or time.time()
+    cur = conn.execute(
+        """UPDATE rogue_events SET resolved=1, note='auto: not seen in 48h'
+           WHERE resolved=0 AND mac IN
+             (SELECT mac FROM devices WHERE last_seen < ?)""",
+        (now - AUTO_RESOLVE_AFTER_S,))
+    return cur.rowcount
 
 
 def mark_known(conn, mac, label=None, note=None):
