@@ -82,8 +82,8 @@ def test_behavior_transient_span():
 def test_rogue_autoresolve():
     conn = _mk_conn()
     now = time.time()
-    gone_mac = "AA:BB:CC:DD:EE:03"    # last seen 3 days ago
-    live_mac = "AA:BB:CC:DD:EE:04"    # seen just now
+    gone_mac = "3C:BB:CC:DD:EE:03"    # last seen 3 days ago (stable MAC)
+    live_mac = "3C:BB:CC:DD:EE:04"    # seen just now (stable MAC)
     with conn:
         for mac, last in ((gone_mac, now - 3 * 86400), (live_mac, now)):
             conn.execute(
