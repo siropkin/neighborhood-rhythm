@@ -117,14 +117,22 @@ def _fire_alert(mac, dev, ts):
 def autoresolve_stale(conn, now=None):
     """Auto-resolve open rogue events whose device hasn't been seen in 48h.
     A drive-by that never came back isn't worth a human's review time; the
-    event stays in the table (resolved, noted) if it returns and re-flags."""
+    event stays in the table (resolved, noted) if it returns and re-flags.
+    Also sweeps events whose MAC is random after a rules fix (e.g. BLE
+    static-random 0xC0) — detection noise from before the fix."""
     now = now or time.time()
     cur = conn.execute(
         """UPDATE rogue_events SET resolved=1, note='auto: not seen in 48h'
            WHERE resolved=0 AND mac IN
              (SELECT mac FROM devices WHERE last_seen < ?)""",
         (now - AUTO_RESOLVE_AFTER_S,))
-    return cur.rowcount
+    n = cur.rowcount
+    for r in conn.execute("SELECT mac FROM rogue_events WHERE resolved=0").fetchall():
+        if is_random_mac(r["mac"]):
+            conn.execute("UPDATE rogue_events SET resolved=1, note='auto: random MAC' "
+                         "WHERE mac=? AND resolved=0", (r["mac"],))
+            n += 1
+    return n
 
 
 def mark_known(conn, mac, label=None, note=None):
