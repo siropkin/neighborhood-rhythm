@@ -390,6 +390,30 @@ function renderTable() {
   });
 }
 
+// ---------- insights feed ----------
+function renderInsights(items) {
+  const panel = document.getElementById('insights-panel');
+  const list = document.getElementById('insights-list');
+  if (!panel || !list) return;
+  panel.hidden = !items.length;
+  list.innerHTML = '';
+  for (const it of items.slice(0, 5)) {
+    const li = document.createElement('li');
+    li.className = 'insight ' + (it.severity === 'warn' ? 'warn' : 'info');
+    const when = new Date(it.ts * 1000);
+    const timeStr = when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    li.innerHTML = `<span class="insight-icon">${it.severity === 'warn' ? '⚠' : 'ℹ'}</span>` +
+      `<span class="insight-text">${esc(it.text)}</span>` +
+      `<span class="insight-ts" title="${esc(when.toLocaleString())}">${esc(timeStr)}</span>`;
+    if (it.mac) {
+      li.style.cursor = 'pointer';
+      li.title = 'open this device';
+      li.onclick = () => { location.href = withToken('/device/' + encodeURIComponent(it.mac)); };
+    }
+    list.appendChild(li);
+  }
+}
+
 // ---------- rogue devices (new stable-MAC devices not in baseline) ----------
 function renderStatusBanner(rogues) {
   const el = document.getElementById('status-banner');
@@ -438,14 +462,16 @@ async function refresh() {
   setIndicators('active');
   try {
     const siteQ = state.siteId ? '?site_id=' + encodeURIComponent(state.siteId) : '';
-    const [stats, now, rogues] = await Promise.all([
+    const [stats, now, rogues, insights] = await Promise.all([
       getJSON('/api/stats?tzoff=' + new Date().getTimezoneOffset()), getJSON('/api/now' + siteQ),
-      getJSON('/api/rogue' + siteQ),
+      getJSON('/api/rogue' + siteQ), getJSON('/api/insights'),
     ]);
     document.getElementById('s-current').textContent = stats.current;
     document.getElementById('s-total').textContent = stats.total.toLocaleString();
     document.getElementById('s-wifi').textContent = stats.wifi;
     document.getElementById('s-sensors').textContent = stats.sensors;
+    const ff = stats.footfall || { max_concurrent: 0, window_unique_sum: 0 };
+    document.getElementById('s-footfall').textContent = ff.max_concurrent + ' / ' + ff.window_unique_sum;
     document.getElementById('s-scan').textContent = fmtAgo(stats.last_scan);
     // KPI tiles: stable vs random (same 24h window, computed server-side)
     document.getElementById('s-stable').textContent = stats.stable.toLocaleString();
@@ -456,6 +482,7 @@ async function refresh() {
     document.getElementById('s-src-mdns').textContent = sc.mdns || 0;
     state.devices = now.devices;
     state.rogues = rogues.rogues || [];
+    renderInsights(insights.insights || []);
     // normalize case: rogue_events MACs can be lowercase, /api/now uppercase
     state.rogueMacs = new Set(state.rogues.map(r => r.mac.toUpperCase()));
     state._lastStats = stats;

@@ -14,6 +14,7 @@ from classify import classify
 from position import _distance_from_rssi
 from behavior import classify_behavior
 from rogue import autoresolve_stale, detect_rogues, collapse_cohorts, MIN_SIGHTINGS
+from insights import run_insights
 
 
 def test_random_mac():
@@ -186,6 +187,109 @@ def test_smoothed_rssi_tukey():
     s = db.smoothed_rssi(conn, mac)
     assert -71.5 <= s <= -69.0, s
     assert db.smoothed_rssi(conn, "00:00:00:00:00:00") is None
+    conn.close()
+
+
+def _add_device(conn, mac, first, last, n=20, is_mine=0, label=None, oui="Sonos"):
+    conn.execute(
+        "INSERT INTO devices (mac, oui_name, first_seen, last_seen, sighting_count, is_mine, last_label) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (mac, oui, first, last, n, is_mine, label))
+
+
+def test_insights_new_resident():
+    conn = _mk_conn()
+    now = time.time()
+    with conn:
+        # stable MAC present 4 days, still here, not known → new resident
+        _add_device(conn, "3C:BB:CC:DD:EE:20", now - 4 * 86400, now - 3600)
+        # known device → no insight
+        _add_device(conn, "3C:BB:CC:DD:EE:21", now - 4 * 86400, now - 3600)
+        conn.execute("INSERT INTO known_devices (mac, added_ts) VALUES ('3C:BB:CC:DD:EE:21', ?)", (now,))
+        # random MAC present 4 days → phone noise, no insight
+        _add_device(conn, "6A:BB:CC:DD:EE:22", now - 4 * 86400, now - 3600)
+        # only 1 day here → still a visitor
+        _add_device(conn, "3C:BB:CC:DD:EE:23", now - 86400, now - 3600)
+    n = run_insights(conn, now=now)
+    assert n == 1, n
+    rows = conn.execute("SELECT * FROM insights WHERE kind='new_resident'").fetchall()
+    assert len(rows) == 1 and rows[0]["mac"] == "3C:BB:CC:DD:EE:20", [dict(r) for r in rows]
+    assert "4 days" in rows[0]["text"]
+    # dedup: a second pass writes nothing
+    assert run_insights(conn, now=now + 300) == 0
+    conn.close()
+
+
+def test_insights_busyness():
+    conn = _mk_conn()
+    now = time.time()
+    cur = int(now // 3600) * 3600 - 3600  # last complete hour
+    with conn:
+        # 8 trailing days of the same hour-of-day at ~10 devices
+        for d in range(1, 9):
+            h = cur - d * 86400
+            for i in range(10):
+                conn.execute(
+                    "INSERT INTO sightings_hourly (hour, mac, sensor_id, source, n) VALUES (?,?,?,?,1)",
+                    (h, f"3C:BB:CC:DD:{d:02X}:{i:02X}", "t", "ble"))
+        # the spike hour: 30 devices (med 10, pstdev 0 → needs the +5 floor too)
+        for i in range(30):
+            conn.execute(
+                "INSERT INTO sightings_hourly (hour, mac, sensor_id, source, n) VALUES (?,?,?,?,1)",
+                (cur, f"3C:BB:CC:DD:FF:{i:02X}", "t", "ble"))
+    n = run_insights(conn, now=now)
+    assert n == 1, n
+    r = conn.execute("SELECT * FROM insights WHERE kind='busyness'").fetchone()
+    assert r and "30 devices" in r["text"] and "~10" in r["text"], dict(r)
+    # dedup: same hour doesn't re-fire
+    assert run_insights(conn, now=now + 300) == 0
+    conn.close()
+
+
+def test_insights_gone_missing_episode():
+    conn = _mk_conn()
+    now = time.time()
+    mac = "3C:BB:CC:DD:EE:30"
+    with conn:
+        _add_device(conn, mac, now - 30 * 86400, now - 3 * 86400, is_mine=1, label="Kitchen speaker")
+    n = run_insights(conn, now=now)
+    assert n == 1, n
+    r = conn.execute("SELECT * FROM insights WHERE kind='gone_missing'").fetchone()
+    assert r and r["severity"] == "warn" and "3 days" in r["text"], dict(r)
+    # same episode: still absent → no re-fire
+    assert run_insights(conn, now=now + 86400) == 0
+    # device returns, then goes missing again → NEW episode, re-fires
+    with conn:
+        conn.execute("UPDATE devices SET last_seen=? WHERE mac=?", (now + 2 * 86400, mac))
+    assert run_insights(conn, now=now + 2 * 86400 + 3600) == 0  # back, seen recently
+    n = run_insights(conn, now=now + 2 * 86400 + 49 * 3600)     # absent 49h again
+    assert n == 1, n
+    assert conn.execute("SELECT COUNT(*) c FROM insights WHERE kind='gone_missing'").fetchone()["c"] == 2
+    conn.close()
+
+
+def test_footfall_bounds():
+    conn = _mk_conn()
+    now = time.time()
+    with conn:
+        # device A in 3 windows, B in 1, C+D sharing a fingerprint in 1 window
+        _add_device(conn, "3C:BB:CC:DD:EE:40", now - 3600, now)
+        _add_device(conn, "3C:BB:CC:DD:EE:41", now - 3600, now)
+        _add_device(conn, "3C:BB:CC:DD:EE:42", now - 3600, now)
+        _add_device(conn, "3C:BB:CC:DD:EE:43", now - 3600, now)
+        conn.execute("UPDATE devices SET fingerprint_id='fp1' WHERE mac IN ('3C:BB:CC:DD:EE:42','3C:BB:CC:DD:EE:43')")
+        for i in range(3):  # A present in windows 0,1,2 (15-min each)
+            conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                         ("3C:BB:CC:DD:EE:40", "t", now - i * 900 - 10, "ble"))
+        conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                     ("3C:BB:CC:DD:EE:41", "t", now - 10, "ble"))
+        for mac in ("3C:BB:CC:DD:EE:42", "3C:BB:CC:DD:EE:43"):  # same physical device
+            conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                         (mac, "t", now - 10, "ble"))
+    ff = db.footfall_bounds(conn, now=now)
+    # window 0: A + B + fp1 = 3 physical devices; windows 1,2: A alone
+    assert ff["max_concurrent"] == 3, ff
+    assert ff["window_unique_sum"] == 5, ff  # 3 + 1 + 1
     conn.close()
 
 

@@ -128,6 +128,19 @@ CREATE TABLE IF NOT EXISTS rogue_events (
 );
 CREATE INDEX IF NOT EXISTS idx_rogue_mac ON rogue_events(mac);
 CREATE INDEX IF NOT EXISTS idx_rogue_unresolved ON rogue_events(resolved);
+
+-- Insights feed: plain-language findings from the analysis pass in
+-- insights.py (runs in the collector). One row per finding; dedup guards in
+-- the generators keep repeats out. mac is NULL for building-level findings.
+CREATE TABLE IF NOT EXISTS insights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL,
+    kind TEXT NOT NULL,        -- new_resident / busyness / gone_missing
+    severity TEXT NOT NULL DEFAULT 'info',  -- info / warn
+    text TEXT NOT NULL,
+    mac TEXT                   -- the device it's about, if any
+);
+CREATE INDEX IF NOT EXISTS idx_insights_ts ON insights(ts);
 -- /api/stats filters devices by last_seen several times per call (43k+ rows)
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);
 """
@@ -326,6 +339,22 @@ def smoothed_rssi(conn, mac, window=11):
     iqr = q3 - q1
     fenced = [v for v in vals if q1 - 1.5 * iqr <= v <= q3 + 1.5 * iqr]
     return sum(fenced) / len(fenced) if fenced else float(vals[len(vals) // 2])
+
+
+def footfall_bounds(conn, now=None):
+    """Unique PHYSICAL devices (fingerprint-deduped) per 15-min window, 24h.
+    max_concurrent = busiest window; window_unique_sum = upper bound on the
+    day's distinct devices (a device in 3 windows counts 3x, and un-linkable
+    rotating MACs inflate further — an honest ceiling, not a people count)."""
+    now = now or time.time()
+    rows = conn.execute(
+        "SELECT CAST(s.ts/900 AS INTEGER) w, "
+        "COUNT(DISTINCT COALESCE(d.fingerprint_id, s.mac)) c "
+        "FROM sightings s JOIN devices d ON d.mac = s.mac "
+        "WHERE s.ts >= ? GROUP BY w",
+        (now - 86400,)).fetchall()
+    return {"max_concurrent": max((r["c"] for r in rows), default=0),
+            "window_unique_sum": sum(r["c"] for r in rows)}
 
 
 if __name__ == "__main__":

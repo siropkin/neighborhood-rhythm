@@ -493,6 +493,23 @@ def api_resolve_rogue(mac):
     return jsonify({"ok": True})
 
 
+@app.route("/api/insights")
+def api_insights():
+    """The insights feed — plain-language findings from the collector's
+    analysis pass (new residents, busy hours, gone-missing devices)."""
+    import sqlite3
+    try:
+        with db.get_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM insights WHERE ts >= ? ORDER BY ts DESC LIMIT 20",
+                (time.time() - 7 * 86400,)).fetchall()
+    except sqlite3.OperationalError:
+        # table not created yet — gunicorn doesn't run init_db(); the next
+        # collector pass (≤5 min) creates it. Empty feed until then.
+        rows = []
+    return jsonify({"insights": [dict(r) for r in rows]})
+
+
 @app.route("/api/stats")
 def api_stats():
     now = time.time()
@@ -587,12 +604,16 @@ def api_stats():
             src = r["source"]
             if src in ("ble", "bt"): source_counts["ble"] += r["c"]
             elif src in ("wifi", "mdns"): source_counts[src] = r["c"]
+        # footfall bounds (24h): unique PHYSICAL devices per 15-min window —
+        # busiest window + an honest upper bound on the day's distinct devices
+        footfall = db.footfall_bounds(conn, now)
     return jsonify({
         "current": current, "total": total, "stable": stable, "random": random,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
         "last_scan": last, "source_counts": source_counts,
         "rhythm": rhythm, "rhythm_avg": rhythm_avg,
         "type_counts": dict(type_counts), "rssi_buckets": rssi_buckets,
+        "footfall": footfall,
     })
 
 

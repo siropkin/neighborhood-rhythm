@@ -405,6 +405,12 @@ def main():
         cohort = collapse_cohorts(conn)
         if cohort:
             print(f"  collapsed {cohort} cohort rogue alert(s)")
+        # insights feed: plain-language findings (new resident, busy hour,
+        # gone missing). Dedup-guarded, so running every pass is cheap.
+        from insights import run_insights
+        n_ins = run_insights(conn)
+        if n_ins:
+            print(f"  {n_ins} new insight(s)")
     _fix_db_perms()
     print(f"scanned {n_dev} devices, {n_ap} APs, stored (sensor={SENSOR_ID})")
 
