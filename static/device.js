@@ -64,11 +64,15 @@ function sparkline(canvas, values) {
   ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 1.5;
   ctx.beginPath();
   values.forEach((v, i) => {
-    const x = (i / (values.length - 1)) * (W - 2) + 1;
+    const x = (i / (values.length - 1)) * (W - 34) + 30;  // leave room for dBm scale
     const y = H - 2 - ((v - min) / span) * (H - 4);
     i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
   });
   ctx.stroke();
+  // dBm scale: max top-left, min bottom-left (higher = stronger/closer)
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
+  ctx.fillText(max.toFixed(0), 2, 10);
+  ctx.fillText(min.toFixed(0), 2, H - 3);
 }
 
 async function load() {
@@ -104,10 +108,10 @@ async function load() {
       <div class="d-sub">${esc(d.oui_name || (d.last_label || 'unknown manufacturer'))} · ${esc(d.mac)}</div>
 
       <div class="d-actions">
-        <button class="btn${d.is_mine ? ' mine' : ''}" id="d-tag">${d.is_mine ? '★ tagged mine — untag' : 'tag as mine'}</button>
-        <input id="d-tag-label" class="d-tag-input" placeholder="label (optional)" value="${esc(d.my_label || '')}">
-        <button class="btn${d.tracked ? ' tracked' : ''}" id="d-track">${d.tracked ? '◉ tracking — stop' : '◉ track this device'}</button>
+        <button class="btn${d.is_mine ? ' mine' : ''}" id="d-tag">${d.is_mine ? '★ my device — untag' : '☆ mark as my device'}</button>
+        <input id="d-tag-label" class="d-tag-input" placeholder="your name for it (optional)" value="${esc(d.my_label || '')}">
       </div>
+      <p class="d-hint d-actions-hint">marking as yours adds a gold ★ and groups it under "known" on the dashboard${d.is_mine ? ' — edit the name and it saves when you leave the field' : ''}</p>
 
       ${data.rogue ? `<div class="status-banner warn" style="margin:12px 0">
         ⚠ Unrecognized device — not in your known baseline.
@@ -116,9 +120,9 @@ async function load() {
       </div>` : (data.is_known ? `<div class="status-banner ok" style="margin:12px 0">✓ in your known baseline</div>` : '')}
 
       <div class="d-grid">
-        <div class="d-stat"><b>${d.sighting_count}</b><label>sightings</label></div>
-        <div class="d-stat"><b>${names.length}</b><label>names advertised</label></div>
-        <div class="d-stat"><b>${Object.keys(bySensor).length}</b><label>sensors</label></div>
+        <div class="d-stat"><b>${d.sighting_count.toLocaleString()}</b><label>sightings</label></div>
+        <div class="d-stat"><b>${names.length}</b><label>name${names.length !== 1 ? 's' : ''} advertised</label></div>
+        <div class="d-stat"><b>${Object.keys(bySensor).length}</b><label>scanner${Object.keys(bySensor).length !== 1 ? 's' : ''}</label></div>
         <div class="d-stat"><b>${fmtAgo(d.last_seen)}</b><label>last seen</label></div>
         <div class="d-stat"><b>${fmtAgo(d.first_seen)}</b><label>first seen</label></div>
       </div>
@@ -136,13 +140,13 @@ async function load() {
       </div>` : ''}
 
       ${tp && tp.pattern && tp.pattern !== 'unknown' ? `<div class="d-section">
-        <h3>detection-time rhythm</h3>
+        <h3>when is it seen?</h3>
         <div class="d-grid" style="margin-bottom:12px">
           <div class="d-stat"><b>${timePatternLabel(tp.pattern)}</b><label>pattern</label></div>
           ${tp.peak_hour != null ? `<div class="d-stat"><b>${tp.peak_hour}:00</b><label>peak hour</label></div>` : ''}
         </div>
         <canvas id="time-histogram" class="d-spark"></canvas>
-        <span class="d-hint">hourly detection count (when this device is seen)</span>
+        <span class="d-hint">detections by hour of day — gold bar is the busiest hour. Flat = always on; a bump = a usage pattern (e.g. evenings).</span>
       </div>` : ''}
 
       ${fp && fp.aliases && fp.aliases.length > 1 ? `<div class="d-section">
@@ -152,9 +156,9 @@ async function load() {
       </div>` : ''}
 
       <div class="d-section">
-        <h3>signal over time</h3>
+        <h3>how strong is the signal?</h3>
         <canvas id="signal-spark" class="d-spark"></canvas>
-        ${rssiSeries.length ? `<span class="d-hint">${rssiSeries.length} readings, ${Math.min(...rssiSeries).toFixed(0)} to ${Math.max(...rssiSeries).toFixed(0)} dBm</span>` : '<span class="d-hint">no signal data (mDNS device)</span>'}
+        ${rssiSeries.length ? `<span class="d-hint">signal strength (dBm) over the last ${rssiSeries.length} sightings, oldest → newest — higher line = closer to the scanner. Range ${Math.min(...rssiSeries).toFixed(0)} to ${Math.max(...rssiSeries).toFixed(0)} dBm.</span>` : '<span class="d-hint">no signal data (mDNS device)</span>'}
       </div>
 
       ${names.length ? `<div class="d-section"><h3>names advertised</h3><div class="d-names">${names.map(n => `<div class="d-name">${esc(n)}</div>`).join('')}</div></div>` : ''}
@@ -241,11 +245,12 @@ async function load() {
         for (let h = 0; h < 24; h++) {
           const v = tp.hours[h] || 0;
           const bh = (v / max) * (H - 18);
-          ctx.fillStyle = (tp.peak_hour === h) ? '#58a6ff' : '#30363d';
+          // same language as the dashboard rhythm chart: blue bars, gold peak
+          ctx.fillStyle = (tp.peak_hour === h) ? '#f0c674' : '#58a6ff';
           ctx.fillRect(h * bw + 1, H - bh - 2, bw - 2, bh);
         }
-        ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace';
-        ctx.fillText('0', 2, H - 1); ctx.fillText('12', W/2 - 6, H - 1); ctx.fillText('23', W - 18, H - 1);
+        ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+        for (const h of [0, 6, 12, 18, 23]) ctx.fillText(String(h), h * bw + bw / 2, H - 1);
       }
     }
 
@@ -258,14 +263,17 @@ async function load() {
       });
       load();
     };
-    document.getElementById('d-track').onclick = async () => {
-      const tracked = !d.tracked;
-      await fetch(withToken('/api/device/' + encodeURIComponent(MAC) + '/track'), {
+    // editing the name of an already-mine device saves on blur/Enter
+    const tagInput = document.getElementById('d-tag-label');
+    const saveLabel = async () => {
+      if (!d.is_mine || tagInput.value === (d.my_label || '')) return;
+      await fetch(withToken('/api/device/' + encodeURIComponent(MAC) + '/tag'), {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ tracked: tracked ? 1 : 0 }),
+        body: JSON.stringify({ is_mine: 1, my_label: tagInput.value }),
       });
       load();
     };
+    tagInput.onchange = saveLabel;
     // rogue review actions (rendered only when an open rogue event exists)
     const post = (url, body) => fetch(withToken(url), {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
