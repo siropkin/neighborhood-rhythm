@@ -173,6 +173,16 @@ over-merges: skip empty signatures, cap group cardinality (>4 = a population not
 a rotation), pairwise links only (no transitive chaining A→B→C→D). The empty-set
 phones stay un-merged — honest footfall noise, not linkable units.
 
+**Data profile (14-day analysis, 2026-08):** 98.9% of MACs are one-day
+transients (median dwell 330s); ~24 resident devices; peak 20:00, quiet 11:00;
+the "commute" shows in appliances waking, not phones. Night-only iPhones send
+**short (5-byte) Nearby Info payloads — no auth tag**, so they're unlinkable
+by design (Pass A needs ≥19-byte payloads; raw payload hex is stored in
+`sightings.extra.apple.raw` for future decoders, e.g. 0x0F Nearby Action's
+per-person SHA256 prefixes — rare but high-value). Rogue noise lessons now in
+code: baseline-age guard (first_seen within 24h of the baseline snapshot ≠ new),
+cohort collapse (≥5 same-OUI same-day = one infrastructure event).
+
 **Researched and rejected (2026-08, don't re-research):** McMatcher-style
 RSSI-shape matching (SAX + cosine, IEEE ICCE 2024) needs dense RSSI streams —
 useless at our 5-min scan cadence (~3 samples per MAC rotation); revisit if the
