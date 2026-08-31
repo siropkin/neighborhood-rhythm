@@ -379,5 +379,6 @@ button:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }
 .insight-ts { flex: 0 0 auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
 @media (max-width: 720px) {
   .insight { flex-wrap: wrap; }
+  .insight-text { flex-basis: 0; }  /* share row 1 with the icon; only the ts wraps */
   .insight-ts { flex-basis: 100%; }
 }
