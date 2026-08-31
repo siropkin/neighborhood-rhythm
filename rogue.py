@@ -43,6 +43,11 @@ def detect_rogues(conn, now=None):
     now = now or time.time()
     # known MACs (the baseline) + already-flagged MACs (don't re-alert)
     known = {r["mac"] for r in conn.execute("SELECT mac FROM known_devices")}
+    # baseline-age guard: a device first seen within 24h of the baseline
+    # snapshot was PART of the neighborhood when you baselined — not a new
+    # arrival. (Cleared ~70% of residual open alerts in practice.)
+    base = conn.execute("SELECT MIN(added_ts) t FROM known_devices").fetchone()["t"]
+    baseline_grace = (base + 86400) if base else 0
     flagged = {r["mac"] for r in conn.execute(
         "SELECT mac FROM rogue_events WHERE resolved=0")}
     # also dedupe by fingerprint: if any alias of a fingerprint is already
@@ -66,6 +71,8 @@ def detect_rogues(conn, now=None):
         mac = r["mac"]
         if mac in known or mac in flagged:
             continue
+        if baseline_grace and r["first_seen"] <= baseline_grace:
+            continue  # here since the baseline was built — the neighborhood, not news
         # dedupe by fingerprint: if a linked alias is already known/flagged
         if r["fingerprint_id"] and r["fingerprint_id"] in fp_known:
             continue
@@ -127,10 +134,59 @@ def autoresolve_stale(conn, now=None):
              (SELECT mac FROM devices WHERE last_seen < ?)""",
         (now - AUTO_RESOLVE_AFTER_S,))
     n = cur.rowcount
+    # baseline-age guard, applied retroactively: devices first seen within 24h
+    # of the baseline snapshot were the neighborhood, not new arrivals
+    base = conn.execute("SELECT MIN(added_ts) t FROM known_devices").fetchone()["t"]
+    if base:
+        cur = conn.execute(
+            """UPDATE rogue_events SET resolved=1, note='auto: predates baseline'
+               WHERE resolved=0 AND mac IN
+                 (SELECT mac FROM devices WHERE first_seen <= ?)""",
+            (base + 86400,))
+        n += cur.rowcount
     for r in conn.execute("SELECT mac FROM rogue_events WHERE resolved=0").fetchall():
         if is_random_mac(r["mac"]):
             conn.execute("UPDATE rogue_events SET resolved=1, note='auto: random MAC' "
                          "WHERE mac=? AND resolved=0", (r["mac"],))
+            n += 1
+    return n
+
+
+def collapse_cohorts(conn, min_size=5):
+    """N same-vendor devices first seen the same day = one infrastructure
+    event (an ISP pushing config to its CPE fleet, a bulk gadget install),
+    not N independent rogues. Keep the earliest event as the representative
+    (annotated), resolve the rest. Prevents the 30-set-top-boxes-at-once
+    alert flood."""
+    rows = conn.execute(
+        """SELECT r.id, r.mac, r.oui_name, r.ts,
+                  CAST(d.first_seen / 86400 AS INTEGER) day
+           FROM rogue_events r JOIN devices d ON d.mac = r.mac
+           WHERE r.resolved = 0 AND r.oui_name IS NOT NULL""").fetchall()
+    groups = {}
+    for r in rows:
+        groups.setdefault((r["oui_name"], r["day"]), []).append(r)
+    n = 0
+    for (oui, _day), members in groups.items():
+        if len(members) < min_size:
+            continue
+        members.sort(key=lambda m: m["ts"])
+        rep, rest = members[0], members[1:]
+        conn.execute(
+            "UPDATE rogue_events SET note=? WHERE id=?",
+            (f"cohort: 1 of {len(members)} {oui} devices that appeared together "
+             f"(infrastructure wave — dismissing it dismisses the idea, the rest stay resolved)",
+             rep["id"]))
+        for m in rest:
+            conn.execute(
+                "UPDATE rogue_events SET resolved=1, note=? WHERE id=?",
+                (f"cohort: one of {len(members)} {oui} devices (represented by {rep['mac']})",
+                 m["id"]))
+            # baseline-suppress like a dismissal, or they re-flag next scan
+            conn.execute(
+                "INSERT INTO known_devices(mac, label, added_ts, note) VALUES(?,?,?,?) "
+                "ON CONFLICT(mac) DO NOTHING",
+                (m["mac"], None, time.time(), f"cohort: {oui} wave"))
             n += 1
     return n
 

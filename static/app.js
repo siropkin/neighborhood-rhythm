@@ -104,7 +104,7 @@ function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 // redraw all charts from cached state (refresh, resize, theme change)
 function redrawCharts() {
   const sc = state._lastStats || {};
-  drawRhythmChart(sc.rhythm);
+  drawRhythmChart(sc.rhythm, sc.rhythm_avg);
   drawRssiHistogram(sc.rssi_buckets);
   const typeCounts = {};
   for (const d of state.devices) {
@@ -118,14 +118,14 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   for (const k in _cssCache) delete _cssCache[k];
   redrawCharts();
 });
-function drawRhythmChart(rhythm) {
+function drawRhythmChart(rhythm, rhythmAvg) {
   const cv = setupCanvas('rhythm-chart');
   if (!cv) return;
   const { ctx, W, H } = cv;
   if (!rhythm) return;
   // show the real peak — no 95th-percentile cap. If one hour is 10x the rest,
   // that's the signal (the building's pulse), not noise to hide.
-  const peakVal = Math.max(...rhythm);
+  const peakVal = Math.max(...rhythm, ...(rhythmAvg || [0]));
   const max = Math.max(1, peakVal * 1.1);
   const padL = 28, padR = 4, padB = 16, padT = 8;
   const plotW = W - padL - padR, plotH = H - padB - padT;
@@ -162,10 +162,26 @@ function drawRhythmChart(rhythm) {
   ctx.fillText('18', padL + 18 * bw + bw / 2, H - 2);
   ctx.fillText('23', padL + 23 * bw + bw / 2, H - 2);
   ctx.textAlign = 'start';
+  // baseline pulse: dashed step-line of the typical hour-of-day average
+  if (rhythmAvg && rhythmAvg.some(v => v > 0)) {
+    ctx.strokeStyle = cssVar('--muted'); ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]); ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    for (let h = 0; h < 24; h++) {
+      const y = padT + plotH - (rhythmAvg[h] / max) * plotH;
+      const x0 = padL + h * bw, x1 = x0 + bw;
+      if (h === 0) ctx.moveTo(x0, y);
+      else ctx.lineTo(x0, y);
+      ctx.lineTo(x1, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
   // hover: full-height column per hour
   tipZones('rhythm-chart', rhythm.map((v, h) => ({
     x: padL + h * bw, y: padT, w: bw, h: plotH,
-    text: `${h}:00–${(h + 1) % 24}:00 — ${v} device${v !== 1 ? 's' : ''}`,
+    text: `${h}:00–${(h + 1) % 24}:00 — ${v} device${v !== 1 ? 's' : ''}` +
+          (rhythmAvg && rhythmAvg[h] ? ` (typical ${rhythmAvg[h]})` : ''),
   })));
 }
 

@@ -11,6 +11,10 @@ from position import compute_position
 
 app = Flask(__name__)
 
+# /api/stats baseline-pulse cache: {tzoff: (computed_ts, rhythm_avg)}.
+# The full-history aggregate costs ~2s on the Pi; it moves slowly, so 30 min.
+_pulse_cache = {}
+
 
 # Auth: when API_TOKEN is set, all /api/* routes + /stream require a token.
 # Accept Authorization: Bearer <token> (integrations) or ?token=<token>
@@ -540,6 +544,28 @@ def api_stats():
             (cutoff_hour,)).fetchall():
             local_h = int(((r["hour"] - tzoff * 60) % 86400) // 3600)
             rhythm[local_h] += r["c"]
+        # the building's baseline pulse: per hour-of-day average over complete
+        # past days (today's partial day excluded) — drawn as a reference band
+        # behind the live 24h bars so deviations pop. Cached (see _pulse_cache).
+        hit = _pulse_cache.get(tzoff)
+        if hit and now - hit[0] < 1800:
+            rhythm_avg = hit[1]
+        else:
+            rhythm_avg = [0] * 24
+            per_day = {}  # day -> {hour_of_day: count}
+            for r in conn.execute(
+                "SELECT h.hour, COUNT(DISTINCT COALESCE(d.fingerprint_id, h.mac)) c "
+                "FROM sightings_hourly h JOIN devices d ON d.mac = h.mac "
+                "GROUP BY h.hour").fetchall():
+                shifted = r["hour"] - tzoff * 60
+                day = int(shifted // 86400)
+                if day == int((now - tzoff * 60) // 86400):
+                    continue  # today is partial — don't drag the average down
+                per_day.setdefault(day, {})[int((shifted % 86400) // 3600)] = r["c"]
+            if per_day:
+                for hod in range(24):
+                    rhythm_avg[hod] = round(sum(d.get(hod, 0) for d in per_day.values()) / len(per_day))
+            _pulse_cache[tzoff] = (now, rhythm_avg)
         # device-type distribution (active now)
         type_counts = collections.Counter()
         for r in conn.execute("SELECT last_type FROM devices WHERE last_seen >= ?", (current_cutoff,)).fetchall():
@@ -565,7 +591,8 @@ def api_stats():
         "current": current, "total": total, "stable": stable, "random": random,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
         "last_scan": last, "source_counts": source_counts,
-        "rhythm": rhythm, "type_counts": dict(type_counts), "rssi_buckets": rssi_buckets,
+        "rhythm": rhythm, "rhythm_avg": rhythm_avg,
+        "type_counts": dict(type_counts), "rssi_buckets": rssi_buckets,
     })
 
 

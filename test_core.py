@@ -13,7 +13,7 @@ from rules import is_random_mac
 from classify import classify
 from position import _distance_from_rssi
 from behavior import classify_behavior
-from rogue import autoresolve_stale, detect_rogues, MIN_SIGHTINGS
+from rogue import autoresolve_stale, detect_rogues, collapse_cohorts, MIN_SIGHTINGS
 
 
 def test_random_mac():
@@ -47,8 +47,11 @@ def test_classify_wifi_private_mac():
 
 def _mk_conn():
     import sqlite3
+    # fresh DB per test — the suite shares no state. db.py binds DB_PATH at
+    # import, so reassign the module global (get_db/init_db read it per call).
+    db.DB_PATH = os.path.join(tempfile.mkdtemp(), "test.db")
     db.init_db()
-    conn = sqlite3.connect(os.environ["RHYTHM_DB"])
+    conn = sqlite3.connect(db.DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -101,6 +104,38 @@ def test_rogue_autoresolve():
 
 def test_rogue_min_sightings():
     assert MIN_SIGHTINGS >= 5  # drive-by tail guard
+
+
+def test_rogue_cohort_collapse():
+    conn = _mk_conn()
+    now = time.time()
+    with conn:
+        # 5 same-vendor devices first seen the same day → cohort
+        for i in range(5):
+            mac = f"3C:BB:CC:DD:EE:{10+i:02X}"
+            conn.execute(
+                "INSERT INTO devices (mac, oui_name, first_seen, last_seen, sighting_count) VALUES (?,?,?,?,?)",
+                (mac, "Vantiva", now - 86400, now, 10))
+            conn.execute("INSERT INTO rogue_events (mac, first_seen, ts, oui_name) VALUES (?,?,?,?)",
+                         (mac, now - 86400, now - 80000 + i, "Vantiva"))
+        # 2 other-vendor devices same day → NOT a cohort
+        for i in range(2):
+            mac = f"3C:BB:CC:DD:EF:{10+i:02X}"
+            conn.execute(
+                "INSERT INTO devices (mac, oui_name, first_seen, last_seen, sighting_count) VALUES (?,?,?,?,?)",
+                (mac, "Sonos", now - 86400, now, 10))
+            conn.execute("INSERT INTO rogue_events (mac, first_seen, ts, oui_name) VALUES (?,?,?,?)",
+                         (mac, now - 86400, now - 80000, "Sonos"))
+    n = collapse_cohorts(conn)
+    assert n == 4, n  # 4 of 5 Vantiva resolved, representative kept open
+    open_rows = conn.execute(
+        "SELECT r.mac, r.oui_name, r.note FROM rogue_events r WHERE r.resolved=0").fetchall()
+    assert len(open_rows) == 3, open_rows  # 1 Vantiva rep + 2 Sonos
+    rep = [r for r in open_rows if r["oui_name"] == "Vantiva"][0]
+    assert "cohort" in rep["note"] and "1 of 5" in rep["note"]
+    # cohort members joined the baseline (won't re-flag)
+    assert conn.execute("SELECT COUNT(*) c FROM known_devices WHERE note LIKE 'cohort:%'").fetchone()["c"] == 4
+    conn.close()
 
 
 def test_mac_normalization():
