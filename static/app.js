@@ -162,6 +162,11 @@ function drawRhythmChart(rhythm) {
   ctx.fillText('18', padL + 18 * bw + bw / 2, H - 2);
   ctx.fillText('23', padL + 23 * bw + bw / 2, H - 2);
   ctx.textAlign = 'start';
+  // hover: full-height column per hour
+  tipZones('rhythm-chart', rhythm.map((v, h) => ({
+    x: padL + h * bw, y: padT, w: bw, h: plotH,
+    text: `${h}:00–${(h + 1) % 24}:00 — ${v} device${v !== 1 ? 's' : ''}`,
+  })));
 }
 
 // colorblind-safe categorical palette (Okabe-Ito derived), assigned in fixed order
@@ -200,6 +205,11 @@ function drawTypeDonut(typeCounts) {
     }
   });
   ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  // hover: whole row per type
+  tipZones('type-chart', entries.map(([t, n], i) => ({
+    x: 0, y: 2 + i * rowH, w: W, h: rowH,
+    text: `${typeLabel(t)} — ${n} device${n !== 1 ? 's' : ''} (${Math.round(n / total * 100)}%)`,
+  })));
   // legend below the chart (accessible text list)
   const legend = document.getElementById('type-legend');
   if (legend) {
@@ -254,6 +264,11 @@ function drawRssiHistogram(rssiBuckets) {
     ctx.fillText(labels[i], x + bw / 2, H - 4);
   }
   ctx.textAlign = 'start';
+  // hover: full-height column per bucket
+  tipZones('rssi-chart', keys.map((k, i) => ({
+    x: padL + i * bw, y: padT, w: bw, h: plotH,
+    text: `${fullLabels[i]}: ${rssiBuckets[keys[i]] || 0} device${(rssiBuckets[keys[i]] || 0) !== 1 ? 's' : ''}`,
+  })));
 }
 
 // ---------- Table ----------

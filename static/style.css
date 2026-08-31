@@ -342,6 +342,9 @@ td.dev-name b { display: inline-block; max-width: 60%; overflow: hidden; text-ov
 .show-all-row td { text-align: center; color: var(--accent); cursor: pointer; font-size: 12px; padding: 8px; }
 .show-all-row:hover { background: var(--surface-2); }
 
+/* chart hover tooltip (charttip.js) */
+#chart-tooltip { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; font-size: 11px; color: var(--text); pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 /* design round 2: accessibility + radar legend */
 :focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }
 button:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }

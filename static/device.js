@@ -51,21 +51,23 @@ const TIME_PATTERN_LABELS = {
 };
 const timePatternLabel = p => TIME_PATTERN_LABELS[p] || p;
 
-function sparkline(canvas, values) {
+function sparkline(canvas, pts) {  // pts: [[ts, rssi], ...]
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || 600, H = 80;
   canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
-  if (values.length < 2) return;
+  if (pts.length < 2) return;
+  const values = pts.map(p => p[1]);
   const min = Math.min(...values), max = Math.max(...values);
   const span = max - min || 1;
+  const step = (W - 34) / (pts.length - 1);
   ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 1.5;
   ctx.beginPath();
-  values.forEach((v, i) => {
-    const x = (i / (values.length - 1)) * (W - 34) + 30;  // leave room for dBm scale
-    const y = H - 2 - ((v - min) / span) * (H - 4);
+  pts.forEach((p, i) => {
+    const x = i * step + 30;  // leave room for the dBm scale
+    const y = H - 2 - ((p[1] - min) / span) * (H - 4);
     i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
   });
   ctx.stroke();
@@ -73,6 +75,11 @@ function sparkline(canvas, values) {
   ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
   ctx.fillText(max.toFixed(0), 2, 10);
   ctx.fillText(min.toFixed(0), 2, H - 3);
+  // hover: vertical strip per reading
+  tipZones(canvas.id, pts.map((p, i) => ({
+    x: 30 + i * step - step / 2, y: 0, w: Math.max(step, 2), h: H,
+    text: `${fmtAgo(p[0])} — ${p[1].toFixed(0)} dBm`,
+  })));
 }
 
 async function load() {
@@ -94,7 +101,8 @@ async function load() {
     document.getElementById('d-title').textContent = d.my_label || d.last_label || MAC;
 
     const names = [...new Set(sightings.map(s => s.name).filter(Boolean))];
-    const rssiSeries = sightings.map(s => s.rssi).filter(r => r != null);
+    const rssiPts = sightings.filter(s => s.rssi != null).map(s => [s.ts, s.rssi]);
+    const rssiSeries = rssiPts.map(p => p[1]);
     const bySensor = {};
     for (const s of sightings) {
       bySensor[s.sensor_id] = (bySensor[s.sensor_id] || 0) + 1;
@@ -228,7 +236,7 @@ async function load() {
 
     `;
 
-    if (rssiSeries.length >= 2) sparkline(document.getElementById('signal-spark'), rssiSeries);
+    if (rssiPts.length >= 2) sparkline(document.getElementById('signal-spark'), rssiPts);
 
     // detection-time histogram (24 bars, one per hour)
     if (tp && tp.hours) {
@@ -241,16 +249,32 @@ async function load() {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, W, H);
         const max = Math.max(1, ...Object.values(tp.hours));
-        const bw = W / 24;
+        const padL = 26, padB = 12, plotH = H - padB;
+        const bw = (W - padL) / 24;
+        // y-axis scale (0 + max) so bar heights mean something
+        ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'left';
+        ctx.fillText(max, 2, 9);
+        ctx.fillText('0', 2, plotH - 1);
         for (let h = 0; h < 24; h++) {
           const v = tp.hours[h] || 0;
-          const bh = (v / max) * (H - 18);
+          const bh = (v / max) * (plotH - 14);
           // same language as the dashboard rhythm chart: blue bars, gold peak
           ctx.fillStyle = (tp.peak_hour === h) ? '#f0c674' : '#58a6ff';
-          ctx.fillRect(h * bw + 1, H - bh - 2, bw - 2, bh);
+          ctx.fillRect(padL + h * bw + 1, plotH - bh, bw - 2, bh);
+        }
+        // peak count above the gold bar
+        if (tp.peak_hour != null && tp.hours[tp.peak_hour]) {
+          const pb = (tp.hours[tp.peak_hour] / max) * (plotH - 14);
+          ctx.fillStyle = '#8b949e'; ctx.textAlign = 'center';
+          ctx.fillText(tp.hours[tp.peak_hour], padL + tp.peak_hour * bw + bw / 2, plotH - pb - 3);
         }
         ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-        for (const h of [0, 6, 12, 18, 23]) ctx.fillText(String(h), h * bw + bw / 2, H - 1);
+        for (const h of [0, 6, 12, 18, 23]) ctx.fillText(String(h), padL + h * bw + bw / 2, H - 1);
+        // hover: full-height column per hour
+        tipZones('time-histogram', Array.from({length: 24}, (_, h) => ({
+          x: padL + h * bw, y: 0, w: bw, h: plotH,
+          text: `${h}:00–${(h + 1) % 24}:00 — ${tp.hours[h] || 0} detections`,
+        })));
       }
     }
 
