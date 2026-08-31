@@ -60,12 +60,16 @@ def detect_rogues(conn, now=None):
         if row and row["fingerprint_id"]:
             fp_known.add(row["fingerprint_id"])
     # stable-MAC devices seen MIN_SIGHTINGS+ times, sightings spanning
-    # MIN_SIGHTING_SPAN_S+ (not a single-scan burst), not mDNS pseudo-keys.
+    # MIN_SIGHTING_SPAN_S+ (not a single-scan burst), not mDNS pseudo-keys,
+    # and seen in the last 24h — a rogue alert means "something new is HERE".
+    # Without the recency gate, a gone device loops: auto-resolved at 48h,
+    # re-flagged next scan, forever (produced 7.4k junk events in 2 days).
     rows = conn.execute(
         """SELECT mac, oui_name, last_type, last_label, first_seen, last_seen, sighting_count, fingerprint_id
            FROM devices
-           WHERE sighting_count >= ? AND (last_seen - first_seen) >= ? AND mac NOT LIKE 'mdns:%'""",
-        (MIN_SIGHTINGS, MIN_SIGHTING_SPAN_S)).fetchall()
+           WHERE sighting_count >= ? AND (last_seen - first_seen) >= ? AND mac NOT LIKE 'mdns:%'
+             AND last_seen >= ?""",
+        (MIN_SIGHTINGS, MIN_SIGHTING_SPAN_S, now - 86400)).fetchall()
     new = []
     for r in rows:
         mac = r["mac"]

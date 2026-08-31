@@ -106,6 +106,27 @@ def test_rogue_min_sightings():
     assert MIN_SIGHTINGS >= 5  # drive-by tail guard
 
 
+def test_rogue_no_flag_resolve_loop():
+    """A device gone >24h must not be (re)flagged — otherwise autoresolve at
+    48h and detection loop forever (produced 7.4k junk events on 8/30-31)."""
+    conn = _mk_conn()
+    now = time.time()
+    with conn:
+        # stable, identifiable, enough sightings — but last seen 3 days ago
+        conn.execute(
+            "INSERT INTO devices (mac, oui_name, last_type, first_seen, last_seen, sighting_count) "
+            "VALUES ('3C:BB:CC:DD:EE:09', 'Sonos', 'speaker', ?, ?, 50)",
+            (now - 4 * 86400, now - 3 * 86400))
+    new = detect_rogues(conn, now=now)
+    assert new == [], new
+    # seen an hour ago → flags fine
+    with conn:
+        conn.execute("UPDATE devices SET last_seen=? WHERE mac='3C:BB:CC:DD:EE:09'", (now - 3600,))
+    new = detect_rogues(conn, now=now)
+    assert len(new) == 1
+    conn.close()
+
+
 def test_rogue_cohort_collapse():
     conn = _mk_conn()
     now = time.time()
