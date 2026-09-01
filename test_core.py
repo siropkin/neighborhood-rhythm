@@ -200,16 +200,39 @@ def _add_device(conn, mac, first, last, n=20, is_mine=0, label=None, oui="Sonos"
 def test_insights_new_resident():
     conn = _mk_conn()
     now = time.time()
+
+    def seen_days(mac, days):
+        for d in days:  # exactly 86400s apart → distinct UTC day buckets
+            conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                         (mac, "t", now - d * 86400 - 7200, "ble"))
+
     with conn:
-        # stable MAC present 4 days, still here, not known → new resident
+        # baseline built 10 days ago → grace covers first_seen <= now-9d
+        conn.execute("INSERT INTO known_devices (mac, added_ts) VALUES ('3C:BB:CC:DD:EE:21', ?)",
+                     (now - 10 * 86400,))
+        # stable MAC, 4-day span, active 4 distinct days, still here → resident
         _add_device(conn, "3C:BB:CC:DD:EE:20", now - 4 * 86400, now - 3600)
+        seen_days("3C:BB:CC:DD:EE:20", range(4))
         # known device → no insight
         _add_device(conn, "3C:BB:CC:DD:EE:21", now - 4 * 86400, now - 3600)
-        conn.execute("INSERT INTO known_devices (mac, added_ts) VALUES ('3C:BB:CC:DD:EE:21', ?)", (now,))
+        seen_days("3C:BB:CC:DD:EE:21", range(4))
+        # open rogue alert → insights must not contradict the rogue queue
+        _add_device(conn, "3C:BB:CC:DD:EE:24", now - 4 * 86400, now - 3600)
+        seen_days("3C:BB:CC:DD:EE:24", range(4))
+        conn.execute("INSERT INTO rogue_events (mac, first_seen, ts) VALUES ('3C:BB:CC:DD:EE:24', ?, ?)",
+                     (now - 4 * 86400, now - 3600))
+        # day-one device (first_seen within 24h of the baseline) → not new
+        _add_device(conn, "3C:BB:CC:DD:EE:25", now - 9.5 * 86400, now - 3600)
+        seen_days("3C:BB:CC:DD:EE:25", range(10))
+        # 5-day span but only 2 active days → occasional visitor, not resident
+        _add_device(conn, "3C:BB:CC:DD:EE:26", now - 5 * 86400, now - 3600)
+        seen_days("3C:BB:CC:DD:EE:26", (0, 4))
         # random MAC present 4 days → phone noise, no insight
         _add_device(conn, "6A:BB:CC:DD:EE:22", now - 4 * 86400, now - 3600)
+        seen_days("6A:BB:CC:DD:EE:22", range(4))
         # only 1 day here → still a visitor
         _add_device(conn, "3C:BB:CC:DD:EE:23", now - 86400, now - 3600)
+        seen_days("3C:BB:CC:DD:EE:23", (0,))
     n = run_insights(conn, now=now)
     assert n == 1, n
     rows = conn.execute("SELECT * FROM insights WHERE kind='new_resident'").fetchall()
@@ -265,6 +288,57 @@ def test_insights_gone_missing_episode():
     n = run_insights(conn, now=now + 2 * 86400 + 49 * 3600)     # absent 49h again
     assert n == 1, n
     assert conn.execute("SELECT COUNT(*) c FROM insights WHERE kind='gone_missing'").fetchone()["c"] == 2
+    conn.close()
+
+
+def test_insights_gone_missing_fixture():
+    """Untagged devices qualify as gone-missing only if they were de-facto
+    fixtures (100+ sightings, active 5+ of the last 7 days)."""
+    conn = _mk_conn()
+    now = time.time()
+    with conn:
+        # fixture: 120 sightings, 5 active days in the last 7, gone 50h → fires
+        _add_device(conn, "3C:BB:CC:DD:EE:32", now - 30 * 86400, now - 50 * 3600,
+                    n=120, label="Hallway light")
+        for d in (2, 3, 4, 5, 6):  # 86400s apart → 5 distinct UTC days, all in-window
+            conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                         ("3C:BB:CC:DD:EE:32", "t", now - d * 86400 - 3600, "ble"))
+        # high-count but only 3 active days in-window → a visitor, no fire
+        _add_device(conn, "3C:BB:CC:DD:EE:33", now - 30 * 86400, now - 50 * 3600, n=120)
+        for d in (2, 3, 4):
+            conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                         ("3C:BB:CC:DD:EE:33", "t", now - d * 86400 - 3600, "ble"))
+        # keep ble "alive" so the sensor_lost generator doesn't join in
+        conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                     ("3C:BB:CC:DD:EE:32", "t", now - 60, "ble"))
+    n = run_insights(conn, now=now)
+    assert n == 1, n
+    r = conn.execute("SELECT * FROM insights WHERE kind='gone_missing'").fetchone()
+    assert r["mac"] == "3C:BB:CC:DD:EE:32" and "Hallway light" in r["text"], dict(r)
+    conn.close()
+
+
+def test_insights_sensor_lost():
+    conn = _mk_conn()
+    now = time.time()
+    with conn:
+        # wifi_probe: daily for 6 days, dark 2 days → lost
+        for d in range(2, 8):
+            conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                         (f"3C:BB:CC:DD:AA:{d:02X}", "t", now - d * 86400, "wifi_probe"))
+        # bt: sporadic (2 active days), dark 3 days → NOT a loss
+        for d in (3, 10):
+            conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                         (f"3C:BB:CC:DD:BB:{d:02X}", "t", now - d * 86400, "bt"))
+        # ble: active right now → fine
+        conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                     ("3C:BB:CC:DD:CC:01", "t", now - 60, "ble"))
+    n = run_insights(conn, now=now)
+    assert n == 1, n
+    r = conn.execute("SELECT * FROM insights WHERE kind='sensor_lost'").fetchone()
+    assert r and r["text"].startswith("wifi_probe") and r["severity"] == "warn", dict(r)
+    # same episode: the source stays dark → no re-fire
+    assert run_insights(conn, now=now + 3600) == 0
     conn.close()
 
 
