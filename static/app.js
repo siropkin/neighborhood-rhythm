@@ -390,42 +390,29 @@ function renderTable() {
   });
 }
 
-// ---------- insights feed ----------
-function renderInsights(items) {
-  const panel = document.getElementById('insights-panel');
-  const list = document.getElementById('insights-list');
-  if (!panel || !list) return;
-  panel.hidden = !items.length;
-  list.innerHTML = '';
-  for (const it of items.slice(0, 5)) {
-    const li = document.createElement('li');
-    li.className = 'insight ' + (it.severity === 'warn' ? 'warn' : 'info');
-    const when = new Date(it.ts * 1000);
-    const timeStr = when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    li.innerHTML = `<span class="insight-icon">${it.severity === 'warn' ? '⚠' : 'ℹ'}</span>` +
-      `<span class="insight-text">${esc(it.text)}</span>` +
-      `<span class="insight-ts" title="${esc(when.toLocaleString())}">${esc(timeStr)}</span>`;
-    if (it.mac) {
-      li.style.cursor = 'pointer';
-      li.title = 'open this device';
-      li.onclick = () => { location.href = withToken('/device/' + encodeURIComponent(it.mac)); };
-    }
-    list.appendChild(li);
-  }
-}
-
 // ---------- rogue devices (new stable-MAC devices not in baseline) ----------
-function renderStatusBanner(rogues) {
+// The banner is the one "needs attention" surface: rogue review count plus
+// warn-level insights (sensor_lost / gone_missing) — things to act on, not trivia.
+function renderStatusBanner(rogues, warns) {
   const el = document.getElementById('status-banner');
   if (!el) return;
-  if (!rogues.length) {
+  warns = warns || [];
+  if (!rogues.length && !warns.length) {
     el.hidden = false;
     el.className = 'status-banner ok';
     el.textContent = '✓ All clear — 0 unrecognized devices. Your building inventory is current.';
+    el.onclick = null;
   } else {
     el.hidden = false;
     el.className = 'status-banner warn';
-    el.innerHTML = `${rogues.length} unrecognized device${rogues.length>1?'s':''} to review — <a href="#" id="review-rogues">review them</a>`;
+    let html = '';
+    if (rogues.length)
+      html += `<div>${rogues.length} unrecognized device${rogues.length>1?'s':''} to review — <a href="#" id="review-rogues">review them</a></div>`;
+    for (const w of warns.slice(0, 3))
+      html += `<div class="banner-insight" ${w.mac ? `data-mac="${esc(w.mac)}"` : ''}>⚠ ${esc(w.text)}</div>`;
+    if (warns.length > 3)
+      html += `<div class="banner-insight">…and ${warns.length - 3} more warning${warns.length-3>1?'s':''}</div>`;
+    el.innerHTML = html;
     const reviewRogues = () => {
       const chip = document.querySelector('.chip[data-filter="rogue"]');
       if (chip) chip.click();
@@ -433,7 +420,16 @@ function renderStatusBanner(rogues) {
     };
     const link = document.getElementById('review-rogues');
     if (link) link.onclick = (e) => { e.preventDefault(); reviewRogues(); };
-    el.onclick = (e) => { if (e.target !== link) reviewRogues(); };
+    el.querySelectorAll('.banner-insight[data-mac]').forEach(d => {
+      d.onclick = (e) => {
+        e.stopPropagation();
+        location.href = withToken('/device/' + encodeURIComponent(d.dataset.mac));
+      };
+    });
+    if (rogues.length)
+      el.onclick = (e) => { if (e.target !== link && !e.target.dataset.mac) reviewRogues(); };
+    else
+      el.onclick = null;
   }
 }
 async function rogueAction(mac, endpoint, body) {
@@ -482,13 +478,17 @@ async function refresh() {
     document.getElementById('s-src-mdns').textContent = sc.mdns || 0;
     state.devices = now.devices;
     state.rogues = rogues.rogues || [];
-    renderInsights(insights.insights || []);
+    // warn-level insights only, deduped by text — a cohort event (e.g. 4
+    // set-top boxes from one outage) reads as one line, not four
+    const seenTexts = new Set();
+    state.warns = (insights.insights || []).filter(i =>
+      i.severity === 'warn' && !seenTexts.has(i.text) && seenTexts.add(i.text));
     // normalize case: rogue_events MACs can be lowercase, /api/now uppercase
     state.rogueMacs = new Set(state.rogues.map(r => r.mac.toUpperCase()));
     state._lastStats = stats;
     redrawCharts();
     renderTable();
-    renderStatusBanner(state.rogues);
+    renderStatusBanner(state.rogues, state.warns);
     setIndicators('ok');
     // hide the first-load overlay + reveal content once we have data
     const loading = document.getElementById('loading');
