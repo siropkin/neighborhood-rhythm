@@ -309,12 +309,22 @@ def test_insights_gone_missing_fixture():
             conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
                          ("3C:BB:CC:DD:EE:33", "t", now - d * 86400 - 3600, "ble"))
         # keep ble "alive" so the sensor_lost generator doesn't join in
+        # (a fourth MAC with no devices row — sightings don't need one)
         conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
-                     ("3C:BB:CC:DD:EE:32", "t", now - 60, "ble"))
+                     ("3C:BB:CC:DD:EE:35", "t", now - 60, "ble"))
+        # fixture-qualified but seen ONLY via wifi_probe, which is dark →
+        # the absence is a source outage, not a departure (the 08-29 flood)
+        _add_device(conn, "3C:BB:CC:DD:EE:34", now - 30 * 86400, now - 50 * 3600, n=120)
+        for d in (2, 3, 4, 5, 6):
+            conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                         ("3C:BB:CC:DD:EE:34", "t", now - d * 86400 - 3600, "wifi_probe"))
     n = run_insights(conn, now=now)
-    assert n == 1, n
-    r = conn.execute("SELECT * FROM insights WHERE kind='gone_missing'").fetchone()
-    assert r["mac"] == "3C:BB:CC:DD:EE:32" and "Hallway light" in r["text"], dict(r)
+    # 1 gone_missing (the ble fixture) + 1 sensor_lost (wifi_probe is dark and
+    # was daily — the guard skips the DEVICE, the source itself still reports)
+    assert n == 2, n
+    rows = conn.execute("SELECT * FROM insights WHERE kind='gone_missing'").fetchall()
+    assert len(rows) == 1, [dict(r) for r in rows]
+    assert rows[0]["mac"] == "3C:BB:CC:DD:EE:32" and "Hallway light" in rows[0]["text"]
     conn.close()
 
 

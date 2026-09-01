@@ -130,7 +130,15 @@ def _busyness(conn, now):
     return 1
 
 
+def _dark_sources(conn, now):
+    """Sources with no sighting in 24h+ — the scanner isn't listening there."""
+    return {r["source"] for r in conn.execute(
+        "SELECT source, MAX(ts) last FROM sightings GROUP BY source")
+        if r["source"] and r["last"] < now - SOURCE_DARK_AFTER_S}
+
+
 def _gone_missing(conn, now):
+    dark = _dark_sources(conn, now)
     rows = conn.execute(
         """SELECT mac, oui_name, last_label, last_seen, sighting_count, is_mine
            FROM devices WHERE last_seen < ? AND (is_mine = 1 OR sighting_count >= ?)""",
@@ -142,6 +150,15 @@ def _gone_missing(conn, now):
             # of the last 7 days) — a neighbor's gadget that left isn't news
             if _active_days(conn, r["mac"], since=now - 7 * 86400) < FIXTURE_MIN_DAYS_7:
                 continue
+        # a device can't be "missing" from a scanner that isn't listening: if
+        # every source it used in its final week is dark, the absence is a
+        # source outage, not a departure (the 08-29 probe-adapter death
+        # flooded 27 of these in one pass)
+        srcs = {s["source"] for s in conn.execute(
+            "SELECT DISTINCT source FROM sightings WHERE mac=? AND ts >= ?",
+            (r["mac"], r["last_seen"] - 7 * 86400))}
+        if srcs and srcs <= dark:
+            continue
         # same-episode guard: an insight newer than the device's last_seen
         # already covers this absence
         if conn.execute(
