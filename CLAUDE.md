@@ -30,13 +30,14 @@ classifier. See README "Honest limits".
 - `enrich.py` — passive payload decoding: Apple Continuity (AirPods/AirTag/Find
   My/Nearby), BLE sensors (BTHome/RuuviTag/Govee), mDNS model/category. Stores
   decoded fields as JSON in `sightings.extra`.
-- `apple_continuity.py` / `sensors.py` — the decoders. Apple decoder now
-  extracts the Nearby **auth tag** (offsets 16–18, stable per device across MAC
-  rotations — the Apple device ID) and rejects short 0x07 TLVs (AirPods
-  false-positive fix: real AirPods payloads are ≥25 bytes).
+- `apple_continuity.py` / `sensors.py` — the decoders. Apple decoder rejects
+  short 0x07 TLVs (AirPods false-positive fix: real AirPods payloads are ≥25
+  bytes). (The Nearby auth-tag extraction was removed 2026-09-01: ≥19-byte
+  0x10 payloads never occur — 0 of 31k in 14 days — so the tag was never
+  extractable. Raw payload hex stays in `sightings.extra.apple.raw`.)
 - `fingerprint.py` — **device fingerprinting**: derives a stable identity above
-  the rotating MAC layer so one physical device is one row, not many. Three
-  linking passes: A) Apple Nearby auth tag (0.95), B) cross-radio — mDNS
+  the rotating MAC layer so one physical device is one row, not many. Linking
+  passes: A) Apple AirPods model+color (0.6), B) cross-radio — mDNS
   hostname serial / OUI+name match across BLE/WiFi/mDNS (0.95), C) MAC-rotation
   clustering — same class+signature, sequential, within 15-min window (0.7).
   Writes `device_fingerprints` + `device_aliases` tables. Idempotent; run after
@@ -159,8 +160,9 @@ cert on a headless Pi). The tunnel token is at `~/.cloudflared/tunnel_token`.
 
 ## Data enrichment (what we decode passively, no BLE connection)
 - Apple Continuity (0x004C): AirPods model+battery (0x07, ≥25-byte guard),
-  AirTag (0x16), Find My (0x12), Nearby Info/iPhone-Mac (0x10 — **extracts the
-  3-byte auth tag at offsets 16–18**, the stable per-device Apple ID), iBeacon (0x02).
+  AirTag (0x16), Find My (0x12), Nearby Info/iPhone-Mac (0x10 — action code
+  only; the long-form payload with an auth tag never occurs in practice),
+  iBeacon (0x02).
 - BLE sensors: BTHome v2 (0xFCD2), RuuviTag v5 (0x0499), Govee (0xEC88).
   (Xiaomi encrypted needs a bind key — not recoverable passively; skipped.)
 - mDNS TXT: _airplay/_googlecast model, _hap (HomeKit) category, _ipp printer model.
@@ -175,11 +177,12 @@ phones stay un-merged — honest footfall noise, not linkable units.
 
 **Data profile (14-day analysis, 2026-08):** 98.9% of MACs are one-day
 transients (median dwell 330s); ~24 resident devices; peak 20:00, quiet 11:00;
-the "commute" shows in appliances waking, not phones. Night-only iPhones send
-**short (5-byte) Nearby Info payloads — no auth tag**, so they're unlinkable
-by design (Pass A needs ≥19-byte payloads; raw payload hex is stored in
-`sightings.extra.apple.raw` for future decoders, e.g. 0x0F Nearby Action's
-per-person SHA256 prefixes — rare but high-value). Rogue noise lessons now in
+the "commute" shows in appliances waking, not phones. **ALL Nearby Info
+payloads are short (≤16 bytes) — the ≥19-byte auth-tag form never occurs**
+(0 of 31k, three analysis rounds), so iPhones are unlinkable by design; raw
+payload hex is stored in `sightings.extra.apple.raw` for future decoders.
+(0x0F Nearby Action checked 2026-08-31: 62 sightings in 14 days, prefixes
+are action codes not identities — not a link signal.) Rogue noise lessons now in
 code: baseline-age guard (first_seen within 24h of the baseline snapshot ≠ new),
 cohort collapse (≥5 same-OUI same-day = one infrastructure event).
 

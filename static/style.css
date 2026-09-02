@@ -370,3 +370,22 @@ button:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }
 /* warn-level insights inside the status banner */
 .banner-insight { margin-top: 4px; font-weight: 400; }
 .banner-insight[data-mac] { cursor: pointer; text-decoration: underline; }
+
+/* per-class rhythm chart series (validated categorical palette, both themes) */
+:root {
+  --series-tv: #3987e5; --series-sensor: #d95926; --series-speaker: #199e70;
+  --series-phone-anon: #c98500; --series-iot: #d55181; --series-phone: #008300;
+  --series-other: #8b949e;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --series-tv: #2a78d6; --series-sensor: #eb6834; --series-speaker: #1baf7a;
+    --series-phone-anon: #eda100; --series-iot: #e87ba4; --series-phone: #008300;
+    --series-other: #6b7280;
+  }
+}
+:root[data-theme="light"] {
+  --series-tv: #2a78d6; --series-sensor: #eb6834; --series-speaker: #1baf7a;
+  --series-phone-anon: #eda100; --series-iot: #e87ba4; --series-phone: #008300;
+  --series-other: #6b7280;
+}

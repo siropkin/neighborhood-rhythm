@@ -583,6 +583,26 @@ def api_stats():
                 for hod in range(24):
                     rhythm_avg[hod] = round(sum(d.get(hod, 0) for d in per_day.values()) / len(per_day))
             _pulse_cache[tzoff] = (now, rhythm_avg)
+        # per-class 24h rhythm for the stacked "who's active when" chart —
+        # SAME join/dedup as the rhythm query above so stacked bars sum to
+        # the aggregate bars. Top 5 types + "other": a small fixed
+        # categorical set (a 9th series is never a generated hue).
+        by_type = collections.defaultdict(lambda: [0] * 24)
+        for r in conn.execute(
+            "SELECT h.hour, COALESCE(d.last_type, 'unknown') t, "
+            "COUNT(DISTINCT COALESCE(d.fingerprint_id, h.mac)) c "
+            "FROM sightings_hourly h JOIN devices d ON d.mac = h.mac "
+            "WHERE h.hour > ? GROUP BY h.hour, t",
+            (cutoff_hour,)).fetchall():
+            local_h = int(((r["hour"] - tzoff * 60) % 86400) // 3600)
+            by_type[r["t"]][local_h] += r["c"]
+        totals = {t: sum(v) for t, v in by_type.items()}
+        top5 = set(sorted(totals, key=totals.get, reverse=True)[:5])
+        rhythm_by_type = {}
+        for t, arr in by_type.items():
+            key = t if t in top5 else "other"
+            base = rhythm_by_type.setdefault(key, [0] * 24)
+            rhythm_by_type[key] = [a + b for a, b in zip(base, arr)]
         # device-type distribution (active now)
         type_counts = collections.Counter()
         for r in conn.execute("SELECT last_type FROM devices WHERE last_seen >= ?", (current_cutoff,)).fetchall():
@@ -611,7 +631,7 @@ def api_stats():
         "current": current, "total": total, "stable": stable, "random": random,
         "wifi": n_ap, "sensors": n_sensors, "fingerprints": n_fp,
         "last_scan": last, "source_counts": source_counts,
-        "rhythm": rhythm, "rhythm_avg": rhythm_avg,
+        "rhythm": rhythm, "rhythm_avg": rhythm_avg, "rhythm_by_type": rhythm_by_type,
         "type_counts": dict(type_counts), "rssi_buckets": rssi_buckets,
         "footfall": footfall,
     })

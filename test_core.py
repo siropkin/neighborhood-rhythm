@@ -280,6 +280,41 @@ def test_insights_sensor_lost():
     conn.close()
 
 
+def test_insights_ap_event():
+    conn = _mk_conn()
+    now = time.time()
+    with conn:
+        # the baseline fill: an old AP from 10 days ago (day-one inventory)
+        conn.execute(
+            "INSERT INTO wifi_aps (bssid, ssid, first_seen, last_seen, last_signal) VALUES (?,?,?,?,?)",
+            ("AA:BB:CC:DD:EE:FF", "siropkins", now - 10 * 86400, now - 60, -34))
+        # strong new AP (2 radios, same SSID, same hour) → ONE insight
+        for i in range(2):
+            conn.execute(
+                "INSERT INTO wifi_aps (bssid, ssid, first_seen, last_seen, last_signal) VALUES (?,?,?,?,?)",
+                (f"AA:BB:CC:DD:EE:0{i}", "XFSETUP-846B", now - 3600, now - 60, -45 - i))
+        # faint new AP → ignored (edge-of-range flicker)
+        conn.execute(
+            "INSERT INTO wifi_aps (bssid, ssid, first_seen, last_seen, last_signal) VALUES (?,?,?,?,?)",
+            ("AA:BB:CC:DD:EE:10", "FarAway", now - 3600, now - 60, -91))
+        # faint but persistent (26h old, still seen) → fires
+        conn.execute(
+            "INSERT INTO wifi_aps (bssid, ssid, first_seen, last_seen, last_signal) VALUES (?,?,?,?,?)",
+            ("AA:BB:CC:DD:EE:11", "Aspen's Guest", now - 26 * 3600, now - 60, -84))
+        # keep ble alive so sensor_lost stays quiet
+        conn.execute("INSERT INTO sightings (mac, sensor_id, ts, source) VALUES (?,?,?,?)",
+                     ("3C:BB:CC:DD:EE:35", "t", now - 60, "ble"))
+    n = run_insights(conn, now=now)
+    assert n == 2, n
+    rows = conn.execute("SELECT * FROM insights WHERE kind='ap_event' ORDER BY id").fetchall()
+    assert len(rows) == 2, [dict(r) for r in rows]
+    assert "XFSETUP-846B" in rows[0]["text"] and "2 radios" in rows[0]["text"]
+    assert "Aspen" in rows[1]["text"]
+    # refire guard: same names within 30 days → silent
+    assert run_insights(conn, now=now + 3600) == 0
+    conn.close()
+
+
 def test_footfall_bounds():
     conn = _mk_conn()
     now = time.time()

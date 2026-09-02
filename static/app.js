@@ -105,6 +105,7 @@ function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 function redrawCharts() {
   const sc = state._lastStats || {};
   drawRhythmChart(sc.rhythm, sc.rhythm_avg);
+  drawTypeRhythmChart(sc.rhythm_by_type);
   drawRssiHistogram(sc.rssi_buckets);
   const typeCounts = {};
   for (const d of state.devices) {
@@ -236,6 +237,70 @@ function drawTypeDonut(typeCounts) {
         return `<span><i style="background:${color}"></i>${esc(typeLabel(t))}<span class="legend-count">${n} (${pct}%)</span></span>`;
       }).join('');
   }
+}
+
+// Stacked per-class rhythm ("who's active when"). Colors come from the
+// validated --series-* palette (fixed entity→slot, never rank-assigned);
+// "other"/unmapped types fold into the neutral residual.
+const seriesColor = t =>
+  getComputedStyle(document.body).getPropertyValue('--series-' + t).trim() || cssVar('--series-other');
+function drawTypeRhythmChart(data) {
+  const cv = setupCanvas('type-rhythm-chart');
+  if (!cv) return;
+  const { ctx, W, H } = cv;
+  if (!data || !Object.keys(data).length) return;
+  // stack order: largest 24h total at the bottom, "other" pinned to the top
+  const order = Object.keys(data)
+    .map(k => [k, data[k].reduce((a, b) => a + b, 0)])
+    .sort((a, b) => b[1] - a[1]).map(([k]) => k)
+    .filter(k => k !== 'other');
+  if (data.other) order.push('other');
+  const hourTotal = h => order.reduce((s, k) => s + (data[k][h] || 0), 0);
+  const max = Math.max(1, ...Array.from({ length: 24 }, (_, h) => hourTotal(h))) * 1.05;
+  const padL = 28, padR = 4, padB = 16, padT = 8;
+  const plotW = W - padL - padR, plotH = H - padB - padT;
+  // y-axis ticks + gridlines (same geometry as the aggregate rhythm chart)
+  const yTicks = 4;
+  ctx.strokeStyle = cssVar('--border'); ctx.fillStyle = cssVar('--muted');
+  ctx.lineWidth = 1; ctx.font = '10px monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= yTicks; i++) {
+    const v = Math.round((max / yTicks) * i);
+    const y = padT + plotH - (v / max) * plotH;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.globalAlpha = i === 0 ? 1 : 0.4; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillText(v, padL - 4, y);
+  }
+  // stacked bars: 2px surface gaps between segments, 2px between bars
+  const bw = plotW / 24;
+  for (let h = 0; h < 24; h++) {
+    let y = padT + plotH;
+    for (const k of order) {
+      const v = data[k][h] || 0;
+      if (!v) continue;
+      const sh = (v / max) * plotH;
+      ctx.fillStyle = seriesColor(k);
+      ctx.fillRect(padL + h * bw + 1, y - sh + 1, bw - 2, Math.max(0, sh - 1));
+      y -= sh;
+    }
+  }
+  // x-axis hour labels
+  ctx.fillStyle = cssVar('--muted'); ctx.font = '10px monospace'; ctx.textAlign = 'center';
+  for (const h of [0, 6, 12, 18, 23]) ctx.fillText(h, padL + h * bw + bw / 2, H - 2);
+  ctx.textAlign = 'start';
+  // legend (always present for multi-series): fixed stack order
+  const legend = document.getElementById('type-rhythm-legend');
+  if (legend) {
+    legend.innerHTML = order.map(k =>
+      `<span><i style="background:${seriesColor(k)}"></i>${esc(typeLabel(k))}</span>`).join('');
+  }
+  // hover: full-height column per hour with the per-type breakdown
+  tipZones('type-rhythm-chart', Array.from({ length: 24 }, (_, h) => {
+    const parts = order.filter(k => data[k][h]).map(k => `${typeLabel(k)} ${data[k][h]}`);
+    return {
+      x: padL + h * bw, y: padT, w: bw, h: plotH,
+      text: `${h}:00–${(h + 1) % 24}:00 — ${hourTotal(h)} device${hourTotal(h) !== 1 ? 's' : ''}` +
+            (parts.length ? `: ${parts.join(' · ')}` : ''),
+    };
+  }));
 }
 
 function drawRssiHistogram(rssiBuckets) {

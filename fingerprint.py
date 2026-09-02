@@ -1,8 +1,11 @@
 """Device fingerprinting — derives a stable identity above the rotating MAC
 layer so one physical device is one row, not many.
 
-Three linking passes, ordered by confidence:
-  A. Apple Continuity  — same Nearby auth tag = same device (0.95)
+Linking passes, ordered by confidence:
+  A. Apple Continuity  — same AirPods model+color = same-class link (0.6).
+     (The original Pass A linked Nearby Info auth tags at 0.95 — removed
+     2026-09-01: ≥19-byte Nearby payloads never occur in practice, 0 of 31k
+     across 14 days, so the tag was never extractable. Dead code, deleted.)
   B. Cross-radio       — mDNS hostname serial / OUI+name match across BLE/WiFi/mDNS (0.95)
   C. MAC-rotation      — same class+signature, sequential (old gone, new appears) within a window (0.7)
 
@@ -21,7 +24,6 @@ import db
 from rules import is_random_mac
 
 # Link confidence thresholds.
-CONF_CONTINUITY = 0.95   # Apple Nearby auth tag — stable per device
 CONF_CROSS_RADIO = 0.95   # mDNS hostname serial / OUI+name — stable per device
 CONF_ROTATION = 0.7       # MAC rotation — same class+signature, sequential
 CONF_AIRPODS = 0.6        # AirPods model+color — same model, maybe same unit
@@ -30,9 +32,9 @@ ROTATION_WINDOW_S = 900   # 15 min — ~3 scan intervals; one rotation gap.
 
 
 def _extract_apple_tag(extra):
-    """Pull the stable Apple identifier from a sighting's extra JSON.
-    Returns ('auth_tag', value) for Nearby, ('airpods', 'model:color') for
-    AirPods, or None."""
+    """Pull the Apple linking signal from a sighting's extra JSON:
+    ('airpods', 'model:color') for AirPods, or None. (Nearby auth tags were
+    the other signal — never observed in real data; see module docstring.)"""
     if not extra:
         return None
     try:
@@ -40,12 +42,7 @@ def _extract_apple_tag(extra):
     except (json.JSONDecodeError, TypeError):
         return None
     apple = e.get("apple") or {}
-    # Nearby auth tag — the stable per-device ID (Pass A).
-    for nb in apple.get("nearby") or []:
-        tag = nb.get("auth_tag")
-        if tag:
-            return ("auth_tag", tag)
-    # AirPods model+color — coarser (same model, maybe same unit).
+    # AirPods model+color — coarse (same model, maybe same unit).
     if apple.get("model_code") and apple.get("color") is not None:
         return ("airpods", f"{apple['model_code']}:{apple['color']}")
     return None
@@ -218,19 +215,12 @@ def fingerprint_all(conn, reclassify_fn=None):
                 _merge(mac, mac2)
 
     # ---- Pass A: Apple Continuity linking ----
-    # Same Nearby auth tag → same device. Same AirPods model+color → same-class.
-    by_tag = defaultdict(list)
+    # Same AirPods model+color → same-class (coarse; the auth-tag branch was
+    # removed — the tag never occurs in real payloads, see module docstring).
     by_airpods = defaultdict(list)
     for mac, s in sig.items():
-        if s["apple"]:
-            kind, val = s["apple"]
-            if kind == "auth_tag":
-                by_tag[val].append(mac)
-            elif kind == "airpods":
-                by_airpods[val].append(mac)
-    for tag, macs in by_tag.items():
-        for i in range(1, len(macs)):
-            _merge(macs[0], macs[i])
+        if s["apple"] and s["apple"][0] == "airpods":
+            by_airpods[s["apple"][1]].append(mac)
     # AirPods: only merge if also same class + time-adjacent (coarser signal).
     for val, macs in by_airpods.items():
         if len(macs) < 2:
@@ -347,11 +337,8 @@ def fingerprint_all(conn, reclassify_fn=None):
         count = sum(sig[m]["count"] or 0 for m in cluster)
         # cluster-level link method + confidence: highest-confidence pass that fired
         has_mdns = any(sig[m]["mdns_serial"] for m in cluster)
-        has_tag = any(sig[m]["apple"] and sig[m]["apple"][0] == "auth_tag" for m in cluster)
         if has_mdns:
             method, conf = "cross-radio", CONF_CROSS_RADIO
-        elif has_tag:
-            method, conf = "continuity", CONF_CONTINUITY
         elif len(cluster) > 1:
             method, conf = "rotation", CONF_ROTATION
         else:

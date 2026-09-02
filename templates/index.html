@@ -64,6 +64,12 @@
       <span class="d-hint">unique devices per hour (last 24h) — dashed line is the typical hour from past days; hover any bar for numbers</span>
     </section>
     <section class="chart-panel">
+      <div class="panel-head"><h2>Who's active when</h2></div>
+      <canvas id="type-rhythm-chart" width="360" height="200" role="img" aria-label="Stacked bar chart of unique devices per hour by device type over the last 24 hours"></canvas>
+      <span class="d-hint">unique devices per hour, stacked by type (last 24h) — hover any hour for the breakdown</span>
+      <div class="legend" id="type-rhythm-legend"></div>
+    </section>
+    <section class="chart-panel">
       <div class="panel-head"><h2>Device types seen</h2></div>
       <canvas id="type-chart" width="360" height="200" role="img" aria-label="Horizontal bar chart of device types by count"></canvas>
       <span class="d-hint">types among devices active right now</span>

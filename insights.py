@@ -10,6 +10,10 @@ Generators:
   - sensor_lost:  a scan source that reported daily goes dark for 24h+
     (born 2026-08-31: the AR9271 probe adapter died and nobody noticed for
     2 days; this insight would have caught it the next morning)
+  - ap_event:     a new WiFi network appears nearby — strong (>= -80 dBm) or
+    persistent (still here after 24h). The AP-level analog of rogue detection
+    (validated 2026-09-01: a neighbor's Xfinity install lit up 4 BSSIDs at
+    once; raw churn is ~90 faint APs/14d, so the guards do the work)
 
 Runs every collector pass (5 min); dedup is per absence episode (a return +
 new absence re-fires). Day bucketing is UTC — consistent grouping is what the
@@ -124,10 +128,57 @@ def _sensor_lost(conn, now):
     return n
 
 
+AP_MIN_SIGNAL = -80        # dBm — fainter than this is edge-of-range flicker
+AP_PERSIST_S = 24 * 3600   # ...unless it stuck around this long
+AP_REFIRE_S = 30 * 86400   # one insight per network name per month
+
+
+def _ap_events(conn, now):
+    # candidates: BSSIDs first seen in the last 8 days (wide window — the
+    # persistence path fires at the 24h mark, the refire guard dedups).
+    # Baseline-fill guard: on a fresh DB every AP gets first_seen=day one;
+    # anything from that first 24h is the initial inventory, not an event.
+    rows = conn.execute(
+        "SELECT bssid, ssid, first_seen, last_seen, last_signal FROM wifi_aps "
+        "WHERE first_seen >= ?",
+        (now - 8 * 86400,)).fetchall()
+    base = conn.execute("SELECT MIN(first_seen) f FROM wifi_aps").fetchone()["f"]
+    fill_grace = (base + 86400) if base else 0
+    rows = [r for r in rows if not fill_grace or r["first_seen"] > fill_grace]
+    # group same-SSID same-day arrivals: one ISP install lights up 4 radios —
+    # that's ONE event, not four
+    groups = {}
+    for r in rows:
+        strong = r["last_signal"] is not None and r["last_signal"] >= AP_MIN_SIGNAL
+        persisted = (now - r["first_seen"] >= AP_PERSIST_S
+                     and r["last_seen"] >= now - 3600)
+        if not (strong or persisted):
+            continue
+        key = r["ssid"] or "(hidden)"
+        groups.setdefault(key, []).append(r)
+    n = 0
+    for ssid, members in groups.items():
+        # refire guard: same network name reported in the last 30 days?
+        if conn.execute(
+                "SELECT 1 FROM insights WHERE kind='ap_event' AND text LIKE ? AND ts >= ? LIMIT 1",
+                (f"%{ssid}%", now - AP_REFIRE_S)).fetchone():
+            continue
+        best = max(members, key=lambda m: m["last_signal"] or -100)
+        radios = f"{len(members)} radios, " if len(members) > 1 else ""
+        _add(conn, "ap_event", "warn",
+             f"New WiFi network nearby: {ssid} ({radios}strongest "
+             f"{best['last_signal']:.0f} dBm) — a neighbor's new gear, or "
+             f"something claiming a familiar name?",
+             None, now)
+        n += 1
+    return n
+
+
 def run_insights(conn, now=None):
     """Run all generators; returns how many insights were written."""
     now = now or time.time()
-    return _gone_missing(conn, now) + _sensor_lost(conn, now)
+    return (_gone_missing(conn, now) + _sensor_lost(conn, now)
+            + _ap_events(conn, now))
 
 
 if __name__ == "__main__":
